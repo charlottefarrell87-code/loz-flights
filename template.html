@@ -175,7 +175,40 @@
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(doc.iv) }, await pageKey(), fromB64(doc.ct));
     return JSON.parse(new TextDecoder().decode(pt));
   }
-  const ghToken = () => ls.get('loz-gh-token');
+  const SHARED = 'shared-token.enc.json';
+  let sharedToken = null, sharedMeta = null;
+  const ghToken = () => ls.get('loz-gh-token') || sharedToken;
+  async function loadSharedToken() {
+    // Public repo: the encrypted file is readable without signing in; only the page password opens it.
+    let doc = null;
+    try {
+      const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${SHARED}?ref=main`, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+      if (r.ok) { const j = await r.json(); doc = JSON.parse(atob(j.content.replace(/\s/g, ''))); sharedMeta = { sha: j.sha }; }
+      else if (r.status !== 404) {
+        const r2 = await fetch(SHARED + '?t=' + Date.now(), { cache: 'no-store' });
+        if (r2.ok) doc = await r2.json();
+      }
+    } catch (e) {}
+    if (!doc || !doc.ct) { sharedToken = null; return; }
+    try { const d = await decrypt(doc); sharedToken = d.token || null; sharedMeta = { ...(sharedMeta || {}), at: d.at }; } catch (e) { sharedToken = null; }
+  }
+  async function shareToken(tok) {
+    const r0 = await fetch(`https://api.github.com/repos/${REPO}/contents/${SHARED}?ref=main`, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+    const sha = r0.ok ? (await r0.json()).sha : null;
+    const body = { message: 'Share editing with everyone who has the page password', content: btoa(JSON.stringify(await encrypt({ token: tok, at: new Date().toISOString() }))), branch: 'main' };
+    if (sha) body.sha = sha;
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${SHARED}`, { method: 'PUT', headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw ghErr(r.status);
+    sharedToken = tok;
+  }
+  async function unshareToken() {
+    const r0 = await fetch(`https://api.github.com/repos/${REPO}/contents/${SHARED}?ref=main`, { headers: ghHeaders(), cache: 'no-store' });
+    if (r0.status === 404) { sharedToken = null; return; }
+    if (!r0.ok) throw ghErr(r0.status);
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${SHARED}`, { method: 'DELETE', headers: { ...ghHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Stop sharing editing', sha: (await r0.json()).sha, branch: 'main' }) });
+    if (!r.ok) throw ghErr(r.status);
+    sharedToken = null;
+  }
   const ghHeaders = () => ({ Authorization: 'Bearer ' + ghToken(), Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
   const ghErr = (status) => { const e = new Error('github ' + status); e.status = status; return e; };
   async function ghGetPending() {
@@ -227,7 +260,15 @@
         h('li', { text: 'Name it “Loz Flights”, set an expiry, and under Repository access choose Only select repositories, then loz-flights.' }),
         h('li', { text: 'Under Permissions, set Contents to Read and write. Leave everything else as it is.' }),
         h('li', { text: 'Generate the token, copy it and paste it below.' })),
-      h('label', { class: 'f' }, 'Token', h('span', { class: 'hint', text: 'Kept in this browser only. Disconnect any time.' }), input),
+      h('label', { class: 'f' }, 'Token', h('span', { class: 'hint', text: 'Kept in this browser. Disconnect any time.' }), input),
+      h('div', { class: 'checks' }, h('label', {}, h('input', { type: 'checkbox', id: 'gh-share', checked: true }), 'Share editing with everyone who has the page password')),
+      h('p', { class: 'muted small', text: 'Sharing saves the token in the repository, encrypted with the page password, so anyone who can unlock this site can add, edit and delete searches without a GitHub account. It only works on loz-flights. To stop, remove shared access below, or delete the token on GitHub.' }),
+      sharedToken ? h('div', { class: 'confirm' }, h('span', { text: 'Editing is currently shared with everyone who has the password.' }),
+        h('button', { class: 'btn danger', type: 'button', id: 'ghUnshare', text: 'Remove shared access', onclick: async (ev) => {
+          const b = ev.currentTarget; b.disabled = true; b.textContent = 'Removing…';
+          try { await unshareToken(); state.canEdit = !!ls.get('loz-gh-token'); state.mode = 'view'; render(); alertLine('Shared editing removed. Also delete the token on GitHub to be sure it can’t be used.'); }
+          catch (x) { err.textContent = ghMessage(x); b.disabled = false; b.textContent = 'Remove shared access'; }
+        } })) : null,
       err,
       h('div', { class: 'formbar' }, h('span'),
         h('div', { class: 'actions' },
@@ -242,7 +283,9 @@
         if (!r.ok) throw ghErr(r.status);
         const j = await r.json();
         if (!j.permissions || !j.permissions.push) throw ghErr(403);
-        if (!ls.set('loz-gh-token', tok)) { err.textContent = 'This browser won’t store the token (private browsing or blocked site data).'; b.disabled = false; b.textContent = 'Connect'; return; }
+        const share = $('#gh-share', form).checked;
+        if (share) { b.textContent = 'Sharing…'; await shareToken(tok); }
+        else if (!ls.set('loz-gh-token', tok)) { err.textContent = 'This browser won’t store the token (private browsing or blocked site data).'; b.disabled = false; b.textContent = 'Connect'; return; }
         state.canEdit = !!(await pageKey());
         try { state.pending = (await ghGetPending()).changes; applyPending(); } catch (x) {}
         state.mode = 'view'; render();
@@ -598,7 +641,7 @@
     $('#newBtn').hidden = !state.canEdit;
     const gb = $('#ghBtn');
     gb.hidden = !STATIC;
-    gb.textContent = ghToken() ? 'Disconnect GitHub' : 'Connect GitHub to edit';
+    gb.textContent = ls.get('loz-gh-token') ? 'Disconnect GitHub' : sharedToken ? 'Shared editing on' : 'Connect GitHub to edit';
     const cb = $('#checkAllBtn');
     cb.hidden = !(state.canEdit && !STATIC && mcpNs);
     cb.dataset.check = 'all';
@@ -629,7 +672,7 @@
   $('#newBtn').addEventListener('click', () => openEditor(null));
   $('#checkAllBtn').addEventListener('click', () => requestCheck(null));
   $('#ghBtn').addEventListener('click', () => {
-    if (ghToken()) { ls.del('loz-gh-token'); state.canEdit = false; state.mode = 'view'; render(); }
+    if (ls.get('loz-gh-token')) { ls.del('loz-gh-token'); state.canEdit = !!sharedToken; state.mode = 'view'; render(); }
     else openConnect();
   });
   addEventListener('hashchange', () => { state.mode = 'view'; state.confirmDelete = false; fromHash(); });
@@ -641,6 +684,7 @@
       fromHash();
       const key = await pageKey().catch(() => null);
       if (!key) return;
+      await loadSharedToken();
       try {
         if (ghToken()) { state.pending = (await ghGetPending()).changes; state.canEdit = true; }
         else {
