@@ -1,164 +1,476 @@
-<!doctype html>
-<html lang="en-GB">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title>Loz flights</title>
+<title>Loz Flights</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-  :root { --bg:#f7f6f2; --panel:#fff; --fg:#1d1d1b; --muted:#6b6a65; --line:#e3e1da; --accent:#c4552f; --uk:#2f6fa8; --bar:#cfccc3; --ok:#2e7d4f; --bad:#b3261e; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#1a1a18; --panel:#242421; --fg:#ecebe6; --muted:#a3a19a; --line:#3a3935; --accent:#e07a52; --uk:#6fa8dc; --bar:#4a4944; --ok:#6cc08b; --bad:#f08a80; } }
+  /* Layout: airport wayfinding. A sticky board of saved searches on top, one search's dashboard below; editor slides in as a panel. */
+  :root {
+    --bg: #f3f5f8; --panel: #ffffff; --fg: #142132; --muted: #5b6878; --line: #dde2ea;
+    --sign: #f2b705; --sign-ink: #1a1400; --navy: #1e3d6e; --navy-ink: #ffffff;
+    --good: #1f7a4d; --bad: #b42318; --bar: #c9d1dc; --uk: #3a6fb0; --chip: #e8edf4;
+    --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+    --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --r: 10px;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #0e141c; --panel: #161f2b; --fg: #e5ebf3; --muted: #93a1b3; --line: #273445;
+    --sign: #f5c542; --sign-ink: #1a1400; --navy: #8fb4ec; --navy-ink: #0e141c;
+    --good: #5cc48d; --bad: #f08b80; --bar: #3a4a5e; --uk: #7fb0ef; --chip: #1f2b3a; color-scheme: dark; } }
+  :root[data-theme="dark"] {
+    --bg: #0e141c; --panel: #161f2b; --fg: #e5ebf3; --muted: #93a1b3; --line: #273445;
+    --sign: #f5c542; --sign-ink: #1a1400; --navy: #8fb4ec; --navy-ink: #0e141c;
+    --good: #5cc48d; --bad: #f08b80; --bar: #3a4a5e; --uk: #7fb0ef; --chip: #1f2b3a; color-scheme: dark; }
+
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  .wrap { max-width:1080px; margin:0 auto; padding:32px 16px 48px; display:grid; gap:20px; }
-  h1 { font:400 32px/1.15 Georgia,"Times New Roman",serif; margin:0; }
-  .sub { color:var(--muted); margin:6px 0 0; }
-  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap:14px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr)); gap:14px; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px; min-width:0; }
-  .label,.note { color:var(--muted); font-size:13px; margin:0; }
-  .big { font:400 34px/1.2 Georgia,"Times New Roman",serif; margin:6px 0 4px; font-variant-numeric:tabular-nums; }
-  h2 { font-size:16px; font-weight:600; margin:0 0 2px; }
-  .chart { position:relative; margin-top:14px; }
-  svg text { fill:var(--muted); font-size:12px; font-family:inherit; }
-  .tip { position:absolute; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 14px rgba(0,0,0,.12); padding:6px 10px; font-size:13px; pointer-events:none; white-space:nowrap; }
-  .tip span { color:var(--muted); display:block; }
-  .tablewrap { overflow-x:auto; margin-top:12px; }
-  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
-  th { color:var(--muted); font-size:13px; font-weight:600; }
-  .num { text-align:right; }
-  tr.best td { color:var(--ok); font-weight:600; }
-  td a.btn { display:inline-block; background:var(--accent); color:#fff; text-decoration:none; border-radius:6px; padding:4px 10px; font-size:13px; font-weight:600; }
-  td a.sub { color:var(--muted); font-size:12px; margin-left:8px; }
-  .up { color:var(--bad); } .down { color:var(--ok); }
-  .foot { color:var(--muted); font-size:12px; }
-  .lock { background:none; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:4px 10px; font:inherit; font-size:12px; cursor:pointer; }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 56px; display: grid; gap: 20px; }
+  h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; }
+  h2 { font-size: 22px; font-weight: 700; }
+  h3 { font-size: 15px; font-weight: 700; letter-spacing: 0.01em; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  a { color: var(--navy); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--sign); outline-offset: 2px; }
+
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .board { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .tab { flex: none; display: grid; gap: 2px; text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: var(--r); padding: 10px 14px; cursor: pointer; min-width: 180px; }
+  .tab[aria-current="true"] { border-color: var(--fg); box-shadow: inset 0 -3px 0 var(--sign); }
+  .tab .route { font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: 0.04em; }
+  .tab .nm { font-weight: 600; }
+  .tab .st { font-size: 12px; color: var(--muted); }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+  .btn.primary { background: var(--navy); color: var(--navy-ink); border-color: var(--navy); }
+  .btn.sign { background: var(--sign); color: var(--sign-ink); border-color: var(--sign); }
+  .btn.danger { color: var(--bad); }
+  .btn.solid-danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; min-width: 0; }
+  .head { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+  .chip b { font-weight: 600; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; background: var(--chip); color: var(--muted); vertical-align: middle; }
+  .pill.live { background: var(--sign); color: var(--sign-ink); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: var(--chip); border-radius: 8px; padding: 8px 12px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 12px; }
+  .tile .lab { font-size: 13px; color: var(--muted); }
+  .tile .big { font-family: var(--mono); font-weight: 600; font-size: 30px; line-height: 1.15; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
+  .up { color: var(--bad); } .down { color: var(--good); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: 12px; }
+  .chart { position: relative; margin-top: 14px; min-height: 120px; }
+  .chart svg text { font-family: var(--body); font-size: 12px; fill: var(--muted); }
+  .tip { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.14); padding: 6px 10px; font-size: 13px; pointer-events: none; white-space: nowrap; }
+  .tip span { display: block; color: var(--muted); }
+
+  .tw { overflow-x: auto; margin-top: 12px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+  th { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  td.num, th.num { text-align: right; }
+  td.code { font-family: var(--mono); font-weight: 600; }
+  tr.best td { background: color-mix(in srgb, var(--good) 10%, transparent); }
+  tr.best td.price { color: var(--good); font-weight: 700; }
+  .plus { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: 2px; vertical-align: super; }
+  a.book { display: inline-block; background: var(--navy); color: var(--navy-ink); text-decoration: none; border-radius: 6px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
+  a.cmp { font-size: 12px; color: var(--muted); margin-left: 8px; }
+
+  .empty { text-align: center; padding: 40px 20px; display: grid; gap: 10px; justify-items: center; }
+  .notice { border-left: 4px solid var(--sign); background: var(--panel); border-radius: 0 var(--r) var(--r) 0; padding: 12px 16px; }
+
+  form.editor { display: grid; gap: 18px; }
+  fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
+  legend { font-family: var(--display); font-weight: 700; font-size: 16px; margin-bottom: 8px; padding: 0; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 12px; }
+  label.f { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+  label.f .hint { font-weight: 400; color: var(--muted); }
+  input[type=text], input[type=date], input[type=number], select, textarea { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0; }
+  textarea { min-height: 70px; resize: vertical; }
+  .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+  .checks label { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+  .formbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 14px; }
+  .err { color: var(--bad); font-size: 13px; }
+  @media (prefers-reduced-motion: no-preference) { .tab, .btn { transition: border-color .15s, background .15s; } }
 </style>
-</head>
-<body>
+
 <div class="wrap">
-  <header>
-    <h1>Melbourne fares from Europe</h1>
-    <p class="sub">Return for 1 adult for the tennis: out 21 to 23 Jan 2027 landing by 24 Jan, home around 25 or 26 Apr. Checked on Google Flights every Tuesday and Friday. Last checked <b id="checked">—</b>.</p>
+  <header class="top">
+    <div>
+      <h1>Loz Flights</h1>
+      <p class="muted small">Saved fare searches, checked on Google Flights every Tuesday and Friday morning.</p>
+    </div>
+    <button class="btn sign" id="newBtn" type="button" hidden>New search</button>
   </header>
-  <section class="tiles">
-    <div class="card"><p class="label">Cheapest economy, anywhere in Europe</p><p class="big" id="best">—</p><p class="note" id="bestNote">—</p></div>
-    <div class="card"><p class="label">Cheapest economy from the UK</p><p class="big" id="uk">—</p><p class="note" id="ukNote">—</p></div>
-    <div class="card"><p class="label">Best value business class</p><p class="big" id="biz">—</p><p class="note" id="bizNote">—</p></div>
-    <div class="card"><p class="label">Economy change since previous check</p><p class="big" id="delta">—</p><p class="note">Cheapest fare against the check before</p></div>
-  </section>
-  <section class="grid">
-    <div class="card"><h2>Cheapest economy return by airport</h2><p class="note">Latest check. Non-UK airports need a flight there and back, not included.</p><div class="chart" id="bars"></div></div>
-    <div class="card"><h2>Cheapest economy fare over time</h2><p class="note">Lowest economy fare from anywhere on each check</p><div class="chart" id="line"></div></div>
-  </section>
-  <section class="card">
-    <h2>Economy, every airport</h2>
-    <p class="note">Cheapest in green. Hours and layover are for the flight out; check the return leg when booking. Book opens the airline's own site; Compare opens the exact Google Flights search.</p>
-    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Lands</th><th>Back</th><th>Airline</th><th>Layover</th><th class="num">Hours</th><th class="num">Price</th><th>Book</th></tr></thead><tbody id="rows"></tbody></table></div>
-  </section>
-  <section class="card">
-    <h2>Business class</h2>
-    <p class="note">Lowest business fare found from each airport checked. Book opens the airline's own site.</p>
-    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Lands</th><th>Back</th><th>Airline</th><th>Layover</th><th class="num">Hours</th><th class="num">Price</th><th>Book</th></tr></thead><tbody id="bizrows"></tbody></table></div>
-  </section>
-  <p class="foot">Prices from Google Flights, indicative and may change at booking. <button class="lock" id="lockBtn" type="button">Lock this device</button></p>
+
+  <nav class="board" id="board" aria-label="Saved searches"></nav>
+
+  <main id="main">
+    <section class="card empty" id="loading">
+      <h2>Loading your searches</h2>
+      <p class="muted">Each saved search gets its own dashboard of the best fares found.</p>
+    </section>
+  </main>
 </div>
+
 <script>
-const FARES = __FARES__;
-const gbp = (n) => '£' + Math.round(n).toLocaleString('en-GB');
-const dt = (s) => new Date(s + 'T00:00:00Z');
-const day = (s) => dt(s).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-const short = (s) => dt(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const $ = (id) => document.getElementById(id);
-const NS = 'http://www.w3.org/2000/svg';
-const el = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; };
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const h = (tag, attrs = {}, ...kids) => {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v; else if (k === 'text') el.textContent = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return el;
+  };
+  const NS = 'http://www.w3.org/2000/svg';
+  const sv = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; };
+  const gbp = (n) => '£' + Math.round(n).toLocaleString('en-GB');
+  const dt = (s) => new Date(s + 'T00:00:00Z');
+  const day = (s) => s ? dt(s).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) : '—';
+  const short = (s) => s ? dt(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '';
+  const daysBetween = (a, b) => Math.round((dt(b) - dt(a)) / 864e5);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const slug = (s) => (s || 'search').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'search';
 
-const lastCheck = FARES.reduce((m, r) => (r.checked > m ? r.checked : m), '');
-const cab = (r) => r.cabin || 'Economy';
-const latest = FARES.filter((r) => r.checked === lastCheck && cab(r) === 'Economy').sort((a, b) => a.price - b.price);
-const biz = FARES.filter((r) => r.checked === lastCheck && cab(r) === 'Business').sort((a, b) => a.price - b.price);
-const econ = FARES.filter((r) => cab(r) === 'Economy');
-const checks = [...new Set(econ.map((r) => r.checked))].sort();
-const history = checks.map((c) => ({ checked: c, price: Math.min(...econ.filter((r) => r.checked === c).map((r) => r.price)) }));
-const best = latest[0], bestUk = latest.find((r) => r.uk);
+  // A read-only copy (the password-protected GitHub page) sets window.LOZ_DATA = {searches, checks} instead of using the live store.
+  const STATIC = window.LOZ_DATA || null;
+  const state = { db: null, canEdit: false, searches: [], current: null, checks: [], unsubChecks: null, mode: 'view', editing: null, confirmDelete: false };
 
-$('checked').textContent = day(lastCheck);
-if (best) { $('best').textContent = gbp(best.price); $('bestNote').textContent = `${best.origin}, ${best.airlines}, ${best.stops}`; }
-if (bestUk) { $('uk').textContent = gbp(bestUk.price); $('ukNote').textContent = `${bestUk.origin}, no positioning flight needed`; }
-if (biz[0]) { $('biz').textContent = gbp(biz[0].price); $('bizNote').textContent = `${biz[0].origin}, ${biz[0].airlines}`; }
-if (history.length > 1) {
-  const d = history.at(-1).price - history.at(-2).price;
-  $('delta').textContent = d === 0 ? 'No change' : (d > 0 ? '+' : '−') + gbp(Math.abs(d));
-  $('delta').className = 'big ' + (d > 0 ? 'up' : d < 0 ? 'down' : '');
-} else $('delta').textContent = 'First check';
-
-const fill = (tbody, rows) => { const min = Math.min(...rows.map((r) => r.price)); for (const r of rows) {
-  const tr = document.createElement('tr'); if (r.price === min) tr.className = 'best';
-  [`${r.origin} (${r.code})`, day(r.depart), r.arrives ? day(r.arrives) : '—', day(r.return), r.airlines, r.layover || r.stops || '—', r.hours.toFixed(1), gbp(r.price)].forEach((v, i) => {
-    const td = document.createElement('td'); td.textContent = v; if (i >= 6) td.className = 'num'; tr.appendChild(td);
-  });
-  const bt = document.createElement('td');
-  const link = (href, label, cls) => { const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = label; a.className = cls; bt.appendChild(a); };
-  if (r.book_url) link(r.book_url, 'Book with ' + r.book_with, 'btn');
-  if (r.search_url) link(r.search_url, 'Compare', 'sub');
-  if (!bt.childNodes.length) bt.textContent = '—';
-  tr.appendChild(bt);
-  tbody.appendChild(tr);
-} };
-fill($('rows'), latest); fill($('bizrows'), biz);
-
-function tip(box, a, b, x, y) {
-  let t = box.querySelector('.tip'); if (!t) { t = document.createElement('div'); t.className = 'tip'; box.appendChild(t); }
-  t.innerHTML = ''; const s = document.createElement('span'); s.textContent = a; t.append(s, b); t.hidden = false;
-  t.style.left = Math.max(0, Math.min(box.clientWidth - t.offsetWidth, x - t.offsetWidth / 2)) + 'px'; t.style.top = Math.max(0, y - 50) + 'px';
-}
-const untip = (box) => { const t = box.querySelector('.tip'); if (t) t.hidden = true; };
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-
-function drawBars() {
-  const box = $('bars'); box.innerHTML = ''; if (!latest.length) return;
-  const W = box.clientWidth || 320, rowH = 34, H = latest.length * rowH;
-  const svg = el('svg', { width: '100%', viewBox: `0 0 ${W} ${H}` }, box);
-  const probe = el('text', {}, svg); let L = 0;
-  for (const r of latest) { probe.textContent = r.origin; L = Math.max(L, probe.getComputedTextLength()); } probe.remove();
-  L += 12; const R = 58, max = Math.max(...latest.map((r) => r.price));
-  latest.forEach((r, i) => {
-    const y = i * rowH + 6, h = rowH - 12, w = (W - L - R) * r.price / max;
-    const t = el('text', { x: L - 8, y: y + h / 2, 'dominant-baseline': 'middle', 'text-anchor': 'end' }, svg); t.textContent = r.origin; t.style.fill = css('--fg');
-    const b = el('rect', { x: L, y, width: Math.max(2, w), height: h, rx: 4, fill: i === 0 ? css('--accent') : r.uk ? css('--uk') : css('--bar') }, svg);
-    b.addEventListener('pointermove', () => tip(box, `${r.origin}, ${r.airlines}, ${r.stops}`, gbp(r.price), L + w, y));
-    b.addEventListener('pointerleave', () => untip(box));
-    const v = el('text', { x: L + w + 6, y: y + h / 2, 'dominant-baseline': 'middle' }, svg); v.textContent = gbp(r.price);
-  });
-}
-
-function drawLine() {
-  const box = $('line'); box.innerHTML = ''; if (!history.length) return;
-  const W = box.clientWidth || 320, H = 220, T = 14, B = 26, Rm = 16;
-  const svg = el('svg', { width: '100%', viewBox: `0 0 ${W} ${H}` }, box);
-  const ps = history.map((h) => h.price), lo = Math.floor(Math.min(...ps) * 0.85 / 100) * 100, hi = Math.ceil(Math.max(...ps) * 1.1 / 100) * 100;
-  const probe = el('text', {}, svg); probe.textContent = gbp(hi); const L = probe.getComputedTextLength() + 10; probe.remove();
-  const ts = history.map((h) => +dt(h.checked)); let t0 = Math.min(...ts), t1 = Math.max(...ts); if (t0 === t1) { t0 -= 3 * 864e5; t1 += 3 * 864e5; }
-  const x = (t) => L + (W - L - Rm) * (t - t0) / (t1 - t0), y = (p) => T + (H - T - B) * (1 - (p - lo) / (hi - lo));
-  for (let i = 0; i <= 4; i++) {
-    const p = lo + (hi - lo) * i / 4;
-    el('line', { x1: L, x2: W - Rm, y1: y(p), y2: y(p), stroke: css('--line') }, svg);
-    const t = el('text', { x: L - 6, y: y(p), 'dominant-baseline': 'middle', 'text-anchor': 'end' }, svg); t.textContent = gbp(p);
+  // ---------- rendering ----------
+  function renderBoard() {
+    const board = $('#board'); board.replaceChildren();
+    for (const s of state.searches) {
+      const c = s.data;
+      board.append(h('button', { class: 'tab', type: 'button', 'aria-current': String(s.id === state.current && state.mode !== 'new'), onclick: () => select(s.id) },
+        h('span', { class: 'route', text: `${(c.origins || []).length > 2 ? 'EUROPE' : (c.origins || []).join('/')} → ${c.dest || ''}` }),
+        h('span', { class: 'nm', text: c.name || 'Untitled search' }),
+        h('span', { class: 'st', text: `${short(c.depart_from)} to ${short(c.return_to || c.return_from)}${c.status === 'paused' ? ' · paused' : ''}` })));
+    }
   }
-  const n = Math.max(2, Math.min(history.length, Math.floor((W - L) / 80)));
-  for (let i = 0; i < n; i++) { const t = t0 + (t1 - t0) * i / (n - 1); const s = el('text', { x: x(t), y: H - 6, 'text-anchor': 'middle' }, svg); s.textContent = short(new Date(t).toISOString().slice(0, 10)); }
-  el('path', { d: history.map((h, i) => (i ? 'L' : 'M') + x(+dt(h.checked)) + ',' + y(h.price)).join(''), fill: 'none', stroke: css('--accent'), 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
-  for (const h of history) {
-    const cx = x(+dt(h.checked)), cy = y(h.price), c = el('circle', { cx, cy, r: 5, fill: css('--accent') }, svg);
-    c.addEventListener('pointermove', () => tip(box, 'Checked ' + day(h.checked), gbp(h.price), cx, cy));
-    c.addEventListener('pointerleave', () => untip(box));
-  }
-}
 
-const draw = () => { drawBars(); drawLine(); };
-draw(); let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw, 150); });
-$('lockBtn').addEventListener('click', () => { try { localStorage.removeItem('loz-key'); } catch (e) {} location.reload(); });
+  function criteriaChips(c) {
+    const chip = (label, val) => val ? h('span', { class: 'chip' }, label + ' ', h('b', { text: val })) : null;
+    return h('div', { class: 'chips' },
+      chip('From', (c.origins || []).join(', ')),
+      chip('To', c.dest),
+      chip('Out', `${day(c.depart_from)} to ${day(c.depart_to)}`),
+      chip('Land by', day(c.land_by)),
+      chip('Home', `${day(c.return_from)} to ${day(c.return_to)}`),
+      c.ideal_return && c.ideal_return.length ? chip('Ideal home', c.ideal_return.map(short).join(' or ')) : null,
+      c.home_by ? chip('Back in UK by', day(c.home_by)) : null,
+      chip('Cabin', (c.cabins || []).join(', ')),
+      chip('Adults', String(c.adults || 1)),
+      c.max_stops != null && c.max_stops !== '' ? chip('Max stops', String(c.max_stops)) : null,
+      c.max_hours ? chip('Max journey', c.max_hours + 'h') : null,
+      chip('Layovers', { any: 'Any', smart: 'Short, or long enough to leave the airport', short: 'Short only' }[c.layover] || null),
+      c.book_direct ? chip('Booking', 'Direct with airline') : null,
+      c.alert_economy ? chip('Alert economy under', gbp(c.alert_economy)) : null,
+      c.alert_business ? chip('Alert business under', gbp(c.alert_business)) : null);
+  }
+
+  function renderView() {
+    const main = $('#main'); main.replaceChildren();
+    const s = state.searches.find((x) => x.id === state.current);
+    if (!s) {
+      main.append(h('section', { class: 'card empty' },
+        h('h2', { text: 'No saved searches yet' }),
+        h('p', { class: 'muted', text: 'Create a search with your dates and preferences. Prices appear after the next Tuesday or Friday check.' }),
+        state.canEdit ? h('button', { class: 'btn sign', type: 'button', text: 'New search', onclick: () => openEditor(null) }) : null));
+      return;
+    }
+    const c = s.data;
+    const checks = state.checks;
+    const latest = checks[checks.length - 1];
+    const rows = latest ? latest.rows || [] : [];
+    const cab = (r) => r.cabin || 'Economy';
+    const econ = rows.filter((r) => cab(r) === 'Economy').sort((a, b) => a.price - b.price);
+    const prem = rows.filter((r) => cab(r) === 'Premium economy').sort((a, b) => a.price - b.price);
+    const biz = rows.filter((r) => cab(r) === 'Business').sort((a, b) => a.price - b.price);
+    const first = rows.filter((r) => cab(r) === 'First').sort((a, b) => a.price - b.price);
+    const mainCab = econ.length ? econ : prem.length ? prem : biz.length ? biz : first;
+    const history = checks.map((k) => {
+      const rr = (k.rows || []).filter((r) => cab(r) === (mainCab[0] ? cab(mainCab[0]) : 'Economy'));
+      return rr.length ? { checked: k.checked, price: Math.min(...rr.map((r) => r.price)) } : null;
+    }).filter(Boolean);
+
+    // header card
+    const head = h('section', { class: 'card' },
+      h('div', { class: 'head' },
+        h('div', {},
+          h('h2', {}, c.name || 'Untitled search', ' ', h('span', { class: 'pill' + (c.status === 'paused' ? '' : ' live'), text: c.status === 'paused' ? 'Paused' : 'Checking' })),
+          h('p', { class: 'muted small', text: latest ? `Last checked ${day(latest.checked)}` : 'Not checked yet. Prices appear after the next Tuesday or Friday check.' })),
+        state.canEdit ? h('div', { class: 'actions' },
+          h('button', { class: 'btn', type: 'button', text: 'Edit criteria', onclick: () => openEditor(s) }),
+          h('button', { class: 'btn', type: 'button', text: c.status === 'paused' ? 'Resume checks' : 'Pause checks', onclick: () => togglePause(s) }),
+          h('button', { class: 'btn danger', type: 'button', text: 'Delete', onclick: () => { state.confirmDelete = true; renderView(); } })) : null),
+      criteriaChips(c),
+      c.notes ? h('p', { class: 'muted small', style: 'margin-top:10px', text: c.notes }) : null,
+      state.confirmDelete ? h('div', { class: 'confirm', style: 'margin-top:14px' },
+        h('span', { text: `Delete “${c.name}” and all its price history? This can't be undone.` }),
+        h('button', { class: 'btn solid-danger', type: 'button', text: 'Delete search', id: 'confirmDel', onclick: () => removeSearch(s) }),
+        h('button', { class: 'btn', type: 'button', text: 'Keep it', onclick: () => { state.confirmDelete = false; renderView(); } })) : null);
+    main.append(head);
+    if (!latest) return;
+
+    const cheapest = mainCab[0];
+    const ukBest = mainCab.find((r) => r.uk);
+    const change = history.length > 1 ? history[history.length - 1].price - history[history.length - 2].price : null;
+    const label = mainCab[0] ? cab(mainCab[0]).toLowerCase() : 'economy';
+    const tile = (lab, big, note, cls) => h('div', { class: 'card tile' }, h('p', { class: 'lab', text: lab }), h('p', { class: 'big ' + (cls || ''), text: big }), h('p', { class: 'muted small', text: note }));
+    main.append(h('section', { class: 'tiles', style: 'margin-top:12px' },
+      tile(`Cheapest ${label}, any airport`, cheapest ? gbp(cheapest.price) : '—', cheapest ? `${cheapest.origin} with ${cheapest.airlines}` : 'None found'),
+      tile(`Cheapest ${label} from the UK`, ukBest ? gbp(ukBest.price) : '—', ukBest ? `${ukBest.origin}, no positioning flight` : 'None found from the UK'),
+      biz.length && mainCab !== biz ? tile('Best value business', gbp(biz[0].price), `${biz[0].origin} with ${biz[0].airlines}`) : null,
+      tile('Change since previous check', change == null ? 'First check' : change === 0 ? 'No change' : (change > 0 ? '+' : '−') + gbp(Math.abs(change)), `Cheapest ${label} against the check before`, change > 0 ? 'up' : change < 0 ? 'down' : '')));
+
+    const barsBox = h('div', { class: 'chart', id: 'bars' });
+    const lineBox = h('div', { class: 'chart', id: 'line' });
+    main.append(h('section', { class: 'grid2', style: 'margin-top:12px' },
+      h('div', { class: 'card' }, h('h3', { text: `Cheapest ${label} by airport` }), h('p', { class: 'muted small', text: 'Latest check. Non-UK airports need a flight there and back, not included.' }), barsBox),
+      h('div', { class: 'card' }, h('h3', { text: `Cheapest ${label} over time` }), h('p', { class: 'muted small', text: 'Lowest fare from any airport on each check' }), lineBox)));
+
+    const table = (title, list) => list.length ? h('section', { class: 'card', style: 'margin-top:12px' },
+      h('h3', { text: title }),
+      h('p', { class: 'muted small', text: 'Hours and layover are for the flight out. Book opens the airline’s own site; Compare opens the exact Google Flights search.' }),
+      h('div', { class: 'tw' }, h('table', {},
+        h('thead', {}, h('tr', {}, ['From', '', 'Out', 'Lands', 'Back', 'Airline', 'Layover', 'Hours', 'Price', 'Book'].map((t, i) => h('th', { class: i === 7 || i === 8 ? 'num' : null, text: t })))),
+        h('tbody', {}, list.map((r, i) => h('tr', { class: i === 0 ? 'best' : null },
+          h('td', { text: r.origin }), h('td', { class: 'code', text: r.code }),
+          h('td', { text: day(r.depart) }),
+          h('td', {}, day(r.arrives), r.arrives && r.depart ? h('span', { class: 'plus', text: '+' + daysBetween(r.depart, r.arrives) }) : null),
+          h('td', { text: day(r.return) }), h('td', { text: r.airlines || '—' }), h('td', { text: r.layover || r.stops || '—' }),
+          h('td', { class: 'num mono', text: r.hours != null ? Number(r.hours).toFixed(1) : '—' }),
+          h('td', { class: 'num mono price', text: gbp(r.price) }),
+          h('td', {}, r.book_url ? h('a', { class: 'book', href: r.book_url, target: '_blank', rel: 'noopener noreferrer', text: 'Book with ' + (r.book_with || r.airlines) }) : '—',
+            r.search_url ? h('a', { class: 'cmp', href: r.search_url, target: '_blank', rel: 'noopener noreferrer', text: 'Compare' }) : null))))))) : null;
+    main.append(table('Economy', econ), table('Premium economy', prem), table('Business class', biz), table('First class', first));
+    drawBars(barsBox, mainCab);
+    drawLine(lineBox, history);
+  }
+
+  function tip(box, a, b, x, y) {
+    let t = box.querySelector('.tip'); if (!t) { t = h('div', { class: 'tip' }); box.append(t); }
+    t.replaceChildren(h('span', { text: a }), b); t.hidden = false;
+    t.style.left = Math.max(0, Math.min(box.clientWidth - t.offsetWidth, x - t.offsetWidth / 2)) + 'px'; t.style.top = Math.max(0, y - 50) + 'px';
+  }
+  const untip = (box) => { const t = box.querySelector('.tip'); if (t) t.hidden = true; };
+
+  function drawBars(box, list) {
+    box.querySelector('svg')?.remove(); if (!list.length) return;
+    const W = box.clientWidth || 320, rowH = 34, H = list.length * rowH;
+    const svg = sv('svg', { width: '100%', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Cheapest fare by departure airport' }, box);
+    const probe = sv('text', {}, svg); let L = 0;
+    for (const r of list) { probe.textContent = r.origin; L = Math.max(L, probe.getComputedTextLength()); } probe.remove();
+    L += 12; const R = 60, max = Math.max(...list.map((r) => r.price));
+    list.forEach((r, i) => {
+      const y = i * rowH + 6, hh = rowH - 12, w = Math.max(2, (W - L - R) * r.price / max);
+      const t = sv('text', { x: L - 8, y: y + hh / 2, 'dominant-baseline': 'middle', 'text-anchor': 'end' }, svg); t.textContent = r.origin; t.style.fill = css('--fg');
+      const b = sv('rect', { x: L, y, width: w, height: hh, rx: 4, fill: i === 0 ? css('--sign') : r.uk ? css('--uk') : css('--bar') }, svg);
+      b.addEventListener('pointermove', () => tip(box, `${r.origin}, ${r.airlines}`, gbp(r.price), L + w, y));
+      b.addEventListener('pointerleave', () => untip(box));
+      const v = sv('text', { x: L + w + 6, y: y + hh / 2, 'dominant-baseline': 'middle' }, svg); v.textContent = gbp(r.price); v.style.fontFamily = css('--mono');
+    });
+  }
+
+  function drawLine(box, history) {
+    box.querySelector('svg')?.remove(); if (!history.length) return;
+    const W = box.clientWidth || 320, H = 220, T = 14, B = 26, Rm = 16;
+    const svg = sv('svg', { width: '100%', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Cheapest fare on each check' }, box);
+    const ps = history.map((x) => x.price);
+    const lo = Math.floor(Math.min(...ps) * 0.85 / 100) * 100, hi = Math.ceil(Math.max(...ps) * 1.1 / 100) * 100;
+    const probe = sv('text', {}, svg); probe.textContent = gbp(hi); const L = probe.getComputedTextLength() + 10; probe.remove();
+    const ts = history.map((x) => +dt(x.checked)); let t0 = Math.min(...ts), t1 = Math.max(...ts);
+    if (t0 === t1) { t0 -= 3 * 864e5; t1 += 3 * 864e5; }
+    const x = (t) => L + (W - L - Rm) * (t - t0) / (t1 - t0), y = (p) => T + (H - T - B) * (1 - (p - lo) / (hi - lo));
+    for (let i = 0; i <= 4; i++) {
+      const p = lo + (hi - lo) * i / 4;
+      sv('line', { x1: L, x2: W - Rm, y1: y(p), y2: y(p), stroke: css('--line') }, svg);
+      const t = sv('text', { x: L - 6, y: y(p), 'dominant-baseline': 'middle', 'text-anchor': 'end' }, svg); t.textContent = gbp(p);
+    }
+    const n = Math.max(2, Math.min(5, Math.floor((W - L) / 80)));
+    for (let i = 0; i < n; i++) { const t = t0 + (t1 - t0) * i / (n - 1); const s = sv('text', { x: x(t), y: H - 6, 'text-anchor': i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle' }, svg); s.textContent = short(new Date(t).toISOString().slice(0, 10)); }
+    sv('path', { d: history.map((p, i) => (i ? 'L' : 'M') + x(+dt(p.checked)) + ',' + y(p.price)).join(''), fill: 'none', stroke: css('--navy'), 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    history.forEach((p, i) => {
+      const cx = x(+dt(p.checked)), cy = y(p.price);
+      const c = sv('circle', { cx, cy, r: i === history.length - 1 ? 6 : 4, fill: i === history.length - 1 ? css('--sign') : css('--navy') }, svg);
+      c.addEventListener('pointermove', () => tip(box, 'Checked ' + day(p.checked), gbp(p.price), cx, cy));
+      c.addEventListener('pointerleave', () => untip(box));
+    });
+  }
+
+  // ---------- editor ----------
+  const field = (label, input, hint) => h('label', { class: 'f' }, label, hint ? h('span', { class: 'hint', text: hint }) : null, input);
+  function openEditor(s) {
+    state.mode = s ? 'edit' : 'new'; state.editing = s; state.confirmDelete = false;
+    const c = s ? s.data : { origins: ['MAN', 'LHR'], dest: '', cabins: ['Economy'], adults: 1, layover: 'smart', book_direct: true, max_stops: 1, status: 'active' };
+    const main = $('#main'); main.replaceChildren();
+    const cabins = ['Economy', 'Premium economy', 'Business', 'First'];
+    const err = h('p', { class: 'err', role: 'alert' });
+    const form = h('form', { class: 'card editor', id: 'editor' },
+      h('h2', { text: s ? 'Edit search' : 'New search' }),
+      h('fieldset', {}, h('legend', { text: 'Trip' }),
+        h('div', { class: 'fields' },
+          field('Name', h('input', { type: 'text', id: 'f-name', required: true, value: c.name || '', placeholder: 'Australian Open 2027' })),
+          field('From airports', h('input', { type: 'text', id: 'f-origins', required: true, value: (c.origins || []).join(', '), placeholder: 'MAN, LHR, DUB, AMS' }), 'Airport codes, separated by commas'),
+          field('To airport', h('input', { type: 'text', id: 'f-dest', required: true, value: c.dest || '', placeholder: 'MEL', maxlength: '3' })),
+          field('Adults', h('input', { type: 'number', id: 'f-adults', min: '1', max: '9', value: c.adults || 1 })))),
+      h('fieldset', {}, h('legend', { text: 'Dates' }),
+        h('div', { class: 'fields' },
+          field('Leave from', h('input', { type: 'date', id: 'f-dep-from', required: true, value: c.depart_from || '' })),
+          field('Leave by', h('input', { type: 'date', id: 'f-dep-to', required: true, value: c.depart_to || '' })),
+          field('Must land by', h('input', { type: 'date', id: 'f-land-by', value: c.land_by || '' }), 'Optional'),
+          field('Fly home from', h('input', { type: 'date', id: 'f-ret-from', required: true, value: c.return_from || '' })),
+          field('Fly home by', h('input', { type: 'date', id: 'f-ret-to', required: true, value: c.return_to || '' })),
+          field('Ideal day home', h('input', { type: 'date', id: 'f-ideal1', value: (c.ideal_return || [])[0] || '' }), 'Optional'),
+          field('Or ideally', h('input', { type: 'date', id: 'f-ideal2', value: (c.ideal_return || [])[1] || '' }), 'Optional'),
+          field('Back in the UK by', h('input', { type: 'date', id: 'f-home-by', value: c.home_by || '' }), 'Optional'))),
+      h('fieldset', {}, h('legend', { text: 'Cabin' }),
+        h('div', { class: 'checks' }, cabins.map((cb, i) => h('label', {}, h('input', { type: 'checkbox', id: 'f-cab-' + i, value: cb, checked: (c.cabins || []).includes(cb) }), cb)))),
+      h('fieldset', {}, h('legend', { text: 'Preferences' }),
+        h('div', { class: 'fields' },
+          field('Max stops', h('select', { id: 'f-stops' }, [['', 'Any'], ['0', 'Direct only'], ['1', 'Up to 1'], ['2', 'Up to 2']].map(([v, t]) => h('option', { value: v, selected: String(c.max_stops ?? '') === v, text: t })))),
+          field('Max journey time', h('input', { type: 'number', id: 'f-hours', min: '10', max: '72', value: c.max_hours || '', placeholder: 'Hours, e.g. 30' }), 'Optional, each way'),
+          field('Layovers', h('select', { id: 'f-layover' }, [['smart', 'Short, or long enough to leave the airport'], ['short', 'Short only'], ['any', 'Any']].map(([v, t]) => h('option', { value: v, selected: (c.layover || 'smart') === v, text: t })))),
+          field('Alert if economy under', h('input', { type: 'number', id: 'f-alert-e', min: '0', step: '10', value: c.alert_economy || '', placeholder: '£' })),
+          field('Alert if business under', h('input', { type: 'number', id: 'f-alert-b', min: '0', step: '10', value: c.alert_business || '', placeholder: '£' }))),
+        h('div', { class: 'checks' }, h('label', {}, h('input', { type: 'checkbox', id: 'f-direct', checked: c.book_direct !== false }), 'Prefer booking direct with the airline'),
+          h('label', {}, h('input', { type: 'checkbox', id: 'f-quick', checked: !!c.quick_home }), 'Prefer the quickest way home')),
+        field('Notes for the checker', h('textarea', { id: 'f-notes', placeholder: 'Anything else to weigh up, e.g. happy to fly from Europe if it saves £200' }, c.notes || ''))),
+      err,
+      h('div', { class: 'formbar' },
+        h('p', { class: 'muted small', text: 'New and changed searches are priced at the next Tuesday or Friday check.' }),
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: () => { state.mode = 'view'; render(); } }),
+          h('button', { class: 'btn primary', type: 'submit', id: 'saveBtn', text: s ? 'Save changes' : 'Save search' }))));
+    form.addEventListener('submit', (e) => { e.preventDefault(); save(form, err); });
+    main.append(form);
+    renderBoard();
+    $('#f-name').focus();
+  }
+
+  async function save(form, err) {
+    const v = (id) => $('#' + id, form).value.trim();
+    const origins = v('f-origins').toUpperCase().split(/[\s,]+/).filter(Boolean);
+    const cabins = [...form.querySelectorAll('input[id^="f-cab-"]:checked')].map((x) => x.value);
+    const data = {
+      name: v('f-name'), origins, dest: v('f-dest').toUpperCase(), adults: Number(v('f-adults')) || 1,
+      depart_from: v('f-dep-from'), depart_to: v('f-dep-to'), land_by: v('f-land-by') || null,
+      return_from: v('f-ret-from'), return_to: v('f-ret-to'), ideal_return: [v('f-ideal1'), v('f-ideal2')].filter(Boolean), home_by: v('f-home-by') || null,
+      cabins, max_stops: v('f-stops') === '' ? null : Number(v('f-stops')), max_hours: Number(v('f-hours')) || null,
+      layover: v('f-layover'), alert_economy: Number(v('f-alert-e')) || null, alert_business: Number(v('f-alert-b')) || null,
+      book_direct: $('#f-direct', form).checked, quick_home: $('#f-quick', form).checked, notes: v('f-notes'),
+      status: state.editing ? state.editing.data.status || 'active' : 'active', updated: new Date().toISOString(),
+    };
+    const bad = !origins.every((o) => /^[A-Z]{3}$/.test(o)) ? 'Use three-letter airport codes for From, e.g. MAN, LHR.'
+      : !/^[A-Z]{3}$/.test(data.dest) ? 'Use a three-letter airport code for To, e.g. MEL.'
+      : !cabins.length ? 'Pick at least one cabin.'
+      : data.depart_to < data.depart_from ? 'Leave by must be on or after Leave from.'
+      : data.return_to < data.return_from ? 'Fly home by must be on or after Fly home from.'
+      : data.return_from <= data.depart_from ? 'Flying home must be after leaving.'
+      : null;
+    if (bad) { err.textContent = bad; return; }
+    err.textContent = '';
+    const btn = $('#saveBtn', form); btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      let id = state.editing?.id;
+      if (!id) {
+        id = slug(data.name); let n = 2;
+        while (state.searches.some((s) => s.id === id)) id = slug(data.name) + '-' + n++;
+        data.created = data.updated;
+      } else data.created = state.editing.data.created || data.updated;
+      await state.db.doc('searches/' + id).set(data);
+      state.mode = 'view'; state.current = id; location.hash = id;
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Try again';
+      err.textContent = e && e.code === 'invalid_argument' ? 'Only the owner can change searches.' : e && e.code === 'quota_exceeded' ? 'The tracker is full. Delete an old search first.' : 'Couldn’t save just now. Check your connection and try again.';
+    }
+  }
+
+  async function togglePause(s) {
+    try { await state.db.doc('searches/' + s.id).update({ status: s.data.status === 'paused' ? 'active' : 'paused', updated: new Date().toISOString() }); }
+    catch (e) { alertLine('Couldn’t change that just now. Try again.'); }
+  }
+
+  async function removeSearch(s) {
+    const b = $('#confirmDel'); if (b) { b.disabled = true; b.textContent = 'Deleting…'; }
+    try {
+      const snap = await state.db.collection(`results/${s.id}/checks`).get();
+      for (const d of snap.docs) await state.db.doc(`results/${s.id}/checks/${d.id}`).delete();
+      await state.db.doc('results/' + s.id).delete();
+      await state.db.doc('searches/' + s.id).delete();
+      state.confirmDelete = false; state.current = null; location.hash = '';
+    } catch (e) { if (b) { b.disabled = false; b.textContent = 'Delete search'; } alertLine('Couldn’t delete just now. Try again.'); }
+  }
+
+  function alertLine(msg) {
+    const n = h('p', { class: 'notice', role: 'alert', text: msg }); $('#main').prepend(n); setTimeout(() => n.remove(), 6000);
+  }
+
+  // ---------- data flow ----------
+  function select(id) {
+    state.mode = 'view'; state.confirmDelete = false;
+    if (location.hash.slice(1) !== id) location.hash = id; else { state.current = id; watchChecks(); render(); }
+  }
+  function watchChecks() {
+    if (state.unsubChecks) { state.unsubChecks(); state.unsubChecks = null; }
+    state.checks = [];
+    if (STATIC && state.current) { state.checks = (STATIC.checks[state.current] || []).slice().sort((a, b) => (a.checked < b.checked ? -1 : 1)); return; }
+    if (!state.current || !state.db) return;
+    const id = state.current;
+    state.unsubChecks = state.db.collection(`results/${id}/checks`).onSnapshot((snap) => {
+      if (state.current !== id) return;
+      state.checks = snap.docs.map((d) => d.data()).filter(Boolean).sort((a, b) => (a.checked < b.checked ? -1 : 1));
+      if (state.mode === 'view') render();
+    }, () => {});
+  }
+  function render() {
+    $('#newBtn').hidden = !state.canEdit;
+    renderBoard();
+    if (state.mode === 'view') renderView();
+  }
+  function fromHash() {
+    const want = decodeURIComponent(location.hash.slice(1));
+    const ids = state.searches.map((s) => s.id);
+    const next = ids.includes(want) ? want : ids.includes(state.current) ? state.current : ids[0] || null;
+    const changed = next !== state.current;
+    state.current = next;
+    if (changed) watchChecks();
+    if (state.mode === 'view') render(); else renderBoard();
+  }
+
+  $('#newBtn').addEventListener('click', () => openEditor(null));
+  addEventListener('hashchange', () => { state.mode = 'view'; state.confirmDelete = false; fromHash(); });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (state.mode === 'view') renderView(); }, 200); });
+
+  (async () => {
+    if (STATIC) {
+      state.searches = STATIC.searches.filter((s) => s.data).sort((a, b) => ((a.data.depart_from || '') < (b.data.depart_from || '') ? -1 : 1));
+      fromHash();
+      return;
+    }
+    const [db, user] = await Promise.all([window.claude?.use?.('db') ?? null, window.claude?.use?.('user') ?? null]);
+    if (!db) {
+      $('#main').replaceChildren(h('section', { class: 'card empty' }, h('h2', { text: 'Sign in to see the searches' }), h('p', { class: 'muted', text: 'Saved searches and prices are stored with this page and need a signed-in Claude account to view.' })));
+      return;
+    }
+    state.db = db;
+    state.canEdit = user ? await user.canEdit() : false;
+    db.collection('searches').onSnapshot((snap) => {
+      state.searches = snap.docs.filter((d) => d.exists).map((d) => ({ id: d.id, data: d.data() }))
+        .sort((a, b) => ((a.data.depart_from || '') < (b.data.depart_from || '') ? -1 : 1));
+      fromHash();
+    }, () => { $('#main').replaceChildren(h('section', { class: 'card empty' }, h('h2', { text: 'Couldn’t load the searches' }), h('p', { class: 'muted', text: 'Reload the page to try again.' }))); });
+  })();
+})();
 </script>
-</body>
-</html>
