@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Loz flights</title>
+<style>
+  :root { --bg:#f7f6f2; --panel:#fff; --fg:#1d1d1b; --muted:#6b6a65; --line:#e3e1da; --accent:#c4552f; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1a1a18; --panel:#242421; --fg:#ecebe6; --muted:#a3a19a; --line:#3a3935; --accent:#e07a52; --bad:#f08a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; padding:16px; }
+  .box { width:100%; max-width:360px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:28px; }
+  h1 { font:400 26px/1.2 Georgia,"Times New Roman",serif; margin:0 0 6px; }
+  p { color:var(--muted); margin:0 0 18px; font-size:14px; }
+  input[type=password] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  label { display:flex; gap:8px; align-items:center; color:var(--muted); font-size:13px; margin:12px 0 16px; }
+  button { width:100%; padding:10px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:600 15px/1 inherit; cursor:pointer; }
+  .err { color:var(--bad); font-size:13px; min-height:1.4em; margin:10px 0 0; }
+</style>
+</head>
+<body>
+<form class="box" id="f">
+  <h1>Loz flights</h1>
+  <p>This page is private. Enter the password to see the fares.</p>
+  <input type="password" id="pw" autocomplete="current-password" aria-label="Password" placeholder="Password" required autofocus>
+  <label><input type="checkbox" id="remember"> Remember on this device</label>
+  <button type="submit">Unlock</button>
+  <div class="err" id="err" role="alert"></div>
+</form>
+<script>
+const P = __PAYLOAD__;
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function deriveRaw(pw) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: b64(P.salt), iterations: P.iter, hash: 'SHA-256' }, base, 256));
+}
+async function open(raw) {
+  const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+  const html = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(P.iv) }, key, b64(P.ct)));
+  document.open(); document.write(html); document.close();
+}
+(async () => {
+  try {
+    const saved = localStorage.getItem('loz-key');
+    if (saved) { const s = JSON.parse(saved); if (s.salt === P.salt) await open(b64(s.k)); }
+  } catch (e) { try { localStorage.removeItem('loz-key'); } catch (_) {} }
+})();
+document.getElementById('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = document.getElementById('err'); err.textContent = 'Unlocking…';
+  try {
+    const raw = await deriveRaw(document.getElementById('pw').value);
+    if (document.getElementById('remember').checked) {
+      try { localStorage.setItem('loz-key', JSON.stringify({ salt: P.salt, k: btoa(String.fromCharCode(...raw)) })); } catch (_) {}
+    }
+    await open(raw);
+  } catch (x) { err.textContent = 'That password didn’t work. Try again.'; }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Loz flights</title>
+<style>
+  :root { --bg:#f7f6f2; --panel:#fff; --fg:#1d1d1b; --muted:#6b6a65; --line:#e3e1da; --accent:#c4552f; --uk:#2f6fa8; --bar:#cfccc3; --ok:#2e7d4f; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1a1a18; --panel:#242421; --fg:#ecebe6; --muted:#a3a19a; --line:#3a3935; --accent:#e07a52; --uk:#6fa8dc; --bar:#4a4944; --ok:#6cc08b; --bad:#f08a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1080px; margin:0 auto; padding:32px 16px 48px; display:grid; gap:20px; }
+  h1 { font:400 32px/1.15 Georgia,"Times New Roman",serif; margin:0; }
+  .sub { color:var(--muted); margin:6px 0 0; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr)); gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px; min-width:0; }
+  .label,.note { color:var(--muted); font-size:13px; margin:0; }
+  .big { font:400 34px/1.2 Georgia,"Times New Roman",serif; margin:6px 0 4px; font-variant-numeric:tabular-nums; }
+  h2 { font-size:16px; font-weight:600; margin:0 0 2px; }
+  .chart { position:relative; margin-top:14px; }
+  svg text { fill:var(--muted); font-size:12px; font-family:inherit; }
+  .tip { position:absolute; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 4px 14px rgba(0,0,0,.12); padding:6px 10px; font-size:13px; pointer-events:none; white-space:nowrap; }
+  .tip span { color:var(--muted); display:block; }
+  .tablewrap { overflow-x:auto; margin-top:12px; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-size:13px; font-weight:600; }
+  .num { text-align:right; }
+  tr.best td { color:var(--ok); font-weight:600; }
+  .up { color:var(--bad); } .down { color:var(--ok); }
+  .foot { color:var(--muted); font-size:12px; }
+  .lock { background:none; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:4px 10px; font:inherit; font-size:12px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Melbourne fares from Europe</h1>
+    <p class="sub">Return economy for 1 adult: land in Melbourne by 24 Jan 2027, back in the UK by 26 Apr. Checked on Google Flights every Tuesday and Friday. Last checked <b id="checked">—</b>.</p>
+  </header>
+  <section class="tiles">
+    <div class="card"><p class="label">Cheapest from anywhere in Europe</p><p class="big" id="best">—</p><p class="note" id="bestNote">—</p></div>
+    <div class="card"><p class="label">Cheapest from the UK</p><p class="big" id="uk">—</p><p class="note" id="ukNote">—</p></div>
+    <div class="card"><p class="label">Change since previous check</p><p class="big" id="delta">—</p><p class="note">Cheapest fare against the check before</p></div>
+  </section>
+  <section class="grid">
+    <div class="card"><h2>Cheapest return by airport</h2><p class="note">Latest check. Non-UK airports need a flight there and back, not included.</p><div class="chart" id="bars"></div></div>
+    <div class="card"><h2>Cheapest fare over time</h2><p class="note">Lowest fare from anywhere on each check</p><div class="chart" id="line"></div></div>
+  </section>
+  <section class="card">
+    <h2>Every airport, latest check</h2>
+    <p class="note">Cheapest in green. Hours are the outbound journey.</p>
+    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Back</th><th>Airline</th><th>Stops</th><th class="num">Hours</th><th class="num">Price</th></tr></thead><tbody id="rows"></tbody></table></div>
+  </section>
+  <p class="foot">Prices from Google Flights, indicative and may change at booking. <button class="lock" id="lockBtn" type="button">Lock this device</button></p>
+</div>
+<script>
+const FARES = __FARES__;
+const gbp = (n) => '£' + Math.round(n).toLocaleString('en-GB');
+const dt = (s) => new Date(s + 'T00:00:00Z');
+const day = (s) => dt(s).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const short = (s) => dt(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const $ = (id) => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; };
+
+const lastCheck = FARES.reduce((m, r) => (r.checked > m ? r.checked : m), '');
+const latest = FARES.filter((r) => r.checked === lastCheck).sort((a, b) => a.price - b.price);
+const checks = [...new Set(FARES.map((r) => r.checked))].sort();
+const history = checks.map((c) => ({ checked: c, price: Math.min(...FARES.filter((r) => r.checked === c).map((r) => r.price)) }));
+const best = latest[0], bestUk = latest.find((r) => r.uk);
+
+$('checked').textContent = day(lastCheck);
+if (best) { $('best').textContent = gbp(best.price); $('bestNote').textContent = `${best.origin}, ${best.airlines}, ${best.stops}`; }
+if (bestUk) { $('uk').textContent = gbp(bestUk.price); $('ukNote').textContent = `${bestUk.origin}, no positioning flight needed`; }
+if (history.length > 1) {
+  const d = history.at(-1).price - history.at(-2).price;
+  $('delta').textContent = d === 0 ? 'No change' : (d > 0 ? '+' : '−') + gbp(Math.abs(d));
+  $('delta').className = 'big ' + (d > 0 ? 'up' : d < 0 ? 'down' : '');
+} else $('delta').textContent = 'First check';
+
+for (const r of latest) {
+  const tr = document.createElement('tr'); if (r === best) tr.className = 'best';
+  [`${r.origin} (${r.code})`, day(r.depart), day(r.return), r.airlines, r.stops, r.hours.toFixed(1), gbp(r.price)].forEach((v, i) => {
+    const td = document.createElement('td'); td.textContent = v; if (i >= 5) td.className = 'num'; tr.appendChild(td);
+  });
+  $('rows').appendChild(tr);
+}
+
+function tip(box, a, b, x, y) {
+  let t = box.querySelector('.tip'); if (!t) { t = document.createElement('div'); t.className = 'tip'; box.appendChild(t); }
+  t.innerHTML = ''; const s = document.createElement('span'); s.textContent = a; t.append(s, b); t.hidden = false;
+  t.style.left = Math.max(0, Math.min(box.clientWidth - t.offsetWidth, x - t.offsetWidth / 2)) + 'px'; t.style.top = Math.max(0, y - 50) + 'px';
+}
+const untip = (box) => { const t = box.querySelector('.tip'); if (t) t.hidden = true; };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function drawBars() {
+  const box = $('bars'); box.innerHTML = ''; if (!latest.length) return;
+  const W = box.clientWidth || 320, rowH = 34, H = latest.length * rowH;
+  const svg = el('svg', { width: '100%', viewBox: `0 0 ${W} ${H}` }, box);
+  const probe = el('text', {}, svg); let L = 0;
+  for (const r of latest) { probe.textContent = r.origin; L = Math.max(L, probe.getComputedTextLength()); } probe.remove();
+  L += 12; const R = 58, max = Math.max(...latest.map((r) => r.price));
+  latest.forEach((r, i) => {
+    const y = i * rowH + 6, h = rowH - 12, w = (W - L - R) * r.price / max;
+    const t = el('text', { x: L - 8, y: y + h / 2, 'dominant-baseline': 'middle', 'text-anchor': 'end' }, svg); t.textContent = r.origin; t.style.fill = css('--fg');
+    const b = el('rect', { x: L, y, width: Math.max(2, w), height: h, rx: 4, fill: i === 0 ? css('--accent') : r.uk ? css('--uk') : css('--bar') }, svg);
+    b.addEventListener('pointermove', () => tip(box, `${r.origin}, ${r.airlines}, ${r.stops}`, gbp(r.price), L + w, y));
+    b.addEventListener('pointerleave', () => untip(box));
+    const v = el('text', { x: L + w + 6, y: y + h / 2, 'dominant-baseline': 'middle' }, svg); v.textContent = gbp(r.price);
+  });
+}
+
+function drawLine() {
+  const box = $('line'); box.innerHTML = ''; if (!history.length) return;
+  const W = box.clientWidth || 320, H = 220, T = 14, B = 26, Rm = 16;
+  const svg = el('svg', { width: '100%', viewBox: `0 0 ${W} ${H}` }, box);
+  const ps = history.map((h) => h.price), lo = Math.floor(Math.min(...ps) * 0.85 / 100) * 100, hi = Math.ceil(Math.max(...ps) * 1.1 / 100) * 100;
+  const probe = el('text', {}, svg); probe.textContent = gbp(hi); const L = probe.getComputedTextLength() + 10; probe.remove();
+  const ts = history.map((h) => +dt(h.checked)); let t0 = Math.min(...ts), t1 = Math.max(...ts); if (t0 === t1) { t0 -= 3 * 864e5; t1 += 3 * 864e5; }
+  const x = (t) => L + (W - L - Rm) * (t - t0) / (t1 - t0), y = (p) => T + (H - T - B) * (1 - (p - lo) / (hi - lo));
+  for (let i = 0; i <= 4; i++) {
+    const p = lo + (hi - lo) * i / 4;
+    el('line', { x1: L, x2: W - Rm, y1: y(p), y2: y(p), stroke: css('--line') }, svg);
+    const t = el('text', { x: L - 6, y: y(p), 'dominant-baseline': 'middle', 'text-anchor': 'end' }, svg); t.textContent = gbp(p);
+  }
+  const n = Math.max(2, Math.min(history.length, Math.floor((W - L) / 80)));
+  for (let i = 0; i < n; i++) { const t = t0 + (t1 - t0) * i / (n - 1); const s = el('text', { x: x(t), y: H - 6, 'text-anchor': 'middle' }, svg); s.textContent = short(new Date(t).toISOString().slice(0, 10)); }
+  el('path', { d: history.map((h, i) => (i ? 'L' : 'M') + x(+dt(h.checked)) + ',' + y(h.price)).join(''), fill: 'none', stroke: css('--accent'), 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+  for (const h of history) {
+    const cx = x(+dt(h.checked)), cy = y(h.price), c = el('circle', { cx, cy, r: 5, fill: css('--accent') }, svg);
+    c.addEventListener('pointermove', () => tip(box, 'Checked ' + day(h.checked), gbp(h.price), cx, cy));
+    c.addEventListener('pointerleave', () => untip(box));
+  }
+}
+
+const draw = () => { drawBars(); drawLine(); };
+draw(); let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw, 150); });
+$('lockBtn').addEventListener('click', () => { try { localStorage.removeItem('loz-key'); } catch (e) {} location.reload(); });
+</script>
+</body>
+</html>
