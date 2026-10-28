@@ -440,8 +440,18 @@
     if (state.mode === 'view') renderView();
   }
   function fromHash() {
-    const want = decodeURIComponent(location.hash.slice(1));
+    let want = decodeURIComponent(location.hash.slice(1));
     const ids = state.searches.map((s) => s.id);
+    // Links from other dashboards: #new, #edit-<id>, #delete-<id>
+    if (want === 'new' && state.canEdit) { history.replaceState(null, '', location.pathname + location.search); openEditor(null); return; }
+    const m = want.match(/^(edit|delete)-(.+)$/);
+    if (m && ids.includes(m[2])) {
+      want = m[2];
+      history.replaceState(null, '', '#' + want);
+      if (state.current !== want) { state.current = want; watchChecks(); }
+      if (m[1] === 'edit' && state.canEdit) { openEditor(state.searches.find((s) => s.id === want)); return; }
+      if (m[1] === 'delete' && state.canEdit) { state.mode = 'view'; state.confirmDelete = true; render(); return; }
+    }
     const next = ids.includes(want) ? want : ids.includes(state.current) ? state.current : ids[0] || null;
     const changed = next !== state.current;
     state.current = next;
@@ -465,7 +475,7 @@
       return;
     }
     state.db = db;
-    state.canEdit = user ? await user.canEdit() : false;
+    state.canEdit = user ? ((await user.canEdit()) || (await user.isOwner())) : false;
     db.collection('searches').onSnapshot((snap) => {
       state.searches = snap.docs.filter((d) => d.exists).map((d) => ({ id: d.id, data: d.data() }))
         .sort((a, b) => ((a.data.depart_from || '') < (b.data.depart_from || '') ? -1 : 1));
