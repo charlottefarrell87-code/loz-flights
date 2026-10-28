@@ -35,26 +35,38 @@ async function deriveRaw(pw) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
   return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: b64(P.salt), iterations: P.iter, hash: 'SHA-256' }, base, 256));
 }
-async function open(raw) {
+const toB64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
+async function unlock(raw) {
   const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
   const html = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(P.iv) }, key, b64(P.ct)));
+  // Kept for this tab only, so the unlocked page can encrypt searches you save from it.
+  try { sessionStorage.setItem('loz-k', toB64(raw)); } catch (_) {}
   document.open(); document.write(html); document.close();
 }
 (async () => {
-  try {
-    const saved = localStorage.getItem('loz-key');
-    if (saved) { const s = JSON.parse(saved); if (s.salt === P.salt) await open(b64(s.k)); }
-  } catch (e) { try { localStorage.removeItem('loz-key'); } catch (_) {} }
+  let saved = null;
+  try { saved = localStorage.getItem('loz-key'); } catch (_) {}
+  if (!saved) return;
+  try { const s = JSON.parse(saved); await unlock(b64(s.k)); }
+  catch (e) {
+    try { localStorage.removeItem('loz-key'); } catch (_) {}
+    document.getElementById('err').textContent = 'Your saved password is out of date. Enter it again and tick Remember.';
+    document.getElementById('remember').checked = true;
+  }
 })();
 document.getElementById('f').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = document.getElementById('err'); err.textContent = 'Unlocking…';
   try {
     const raw = await deriveRaw(document.getElementById('pw').value);
-    if (document.getElementById('remember').checked) {
-      try { localStorage.setItem('loz-key', JSON.stringify({ salt: P.salt, k: btoa(String.fromCharCode(...raw)) })); } catch (_) {}
-    }
-    await open(raw);
+    const remember = document.getElementById('remember').checked;
+    // Check the password works before remembering it.
+    const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(P.iv) }, key, b64(P.ct));
+    let stored = false;
+    if (remember) { try { localStorage.setItem('loz-key', JSON.stringify({ salt: P.salt, k: toB64(raw) })); stored = localStorage.getItem('loz-key') !== null; } catch (_) {} }
+    if (remember && !stored) { err.textContent = 'This browser won’t let the page remember you (private browsing or blocked site data). Opening anyway…'; await new Promise((r) => setTimeout(r, 1500)); }
+    await unlock(raw);
   } catch (x) { err.textContent = 'That password didn’t work. Try again.'; }
 });
 </script>

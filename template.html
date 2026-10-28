@@ -108,7 +108,10 @@
       <h1>Loz Flights</h1>
       <p class="muted small">Saved fare searches, checked on Google Flights every Tuesday and Friday morning.</p>
     </div>
-    <button class="btn sign" id="newBtn" type="button" hidden>New search</button>
+    <div class="actions">
+      <button class="btn" id="ghBtn" type="button" hidden>Connect GitHub to edit</button>
+      <button class="btn sign" id="newBtn" type="button" hidden>New search</button>
+    </div>
   </header>
 
   <nav class="board" id="board" aria-label="Saved searches"></nav>
@@ -146,7 +149,107 @@
 
   // A read-only copy (the password-protected GitHub page) sets window.LOZ_DATA = {searches, checks} instead of using the live store.
   const STATIC = window.LOZ_DATA || null;
-  const state = { db: null, canEdit: false, searches: [], current: null, checks: [], unsubChecks: null, mode: 'view', editing: null, confirmDelete: false };
+
+  // ---------- GitHub saving (the password-protected site only) ----------
+  // Changes made on the site are encrypted with the page password and saved to the
+  // repository as pending.enc.json; the twice-weekly check applies them to Loz Flights.
+  const REPO = 'charlottefarrell87-code/loz-flights', PENDING = 'pending.enc.json';
+  const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
+  const toB64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  let aesKey = null;
+  async function pageKey() {
+    if (aesKey) return aesKey;
+    let raw = null; try { raw = sessionStorage.getItem('loz-k'); } catch (e) {}
+    if (!raw) return null;
+    aesKey = await crypto.subtle.importKey('raw', fromB64(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
+    return aesKey;
+  }
+  async function encrypt(obj) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await pageKey(), new TextEncoder().encode(JSON.stringify(obj))));
+    return { v: 1, iv: toB64(iv), ct: toB64(ct) };
+  }
+  async function decrypt(doc) {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(doc.iv) }, await pageKey(), fromB64(doc.ct));
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+  const ghToken = () => ls.get('loz-gh-token');
+  const ghHeaders = () => ({ Authorization: 'Bearer ' + ghToken(), Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
+  const ghErr = (status) => { const e = new Error('github ' + status); e.status = status; return e; };
+  async function ghGetPending() {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${PENDING}?ref=main`, { headers: ghHeaders(), cache: 'no-store' });
+    if (r.status === 404) return { sha: null, changes: [] };
+    if (!r.ok) throw ghErr(r.status);
+    const j = await r.json();
+    const doc = JSON.parse(atob(j.content.replace(/\s/g, '')));
+    return { sha: j.sha, changes: doc.ct ? (await decrypt(doc)).changes || [] : [] };
+  }
+  async function ghPutPending(changes, sha, message) {
+    const body = { message, content: btoa(JSON.stringify(await encrypt({ changes }))), branch: 'main' };
+    if (sha) body.sha = sha;
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${PENDING}`, { method: 'PUT', headers: { ...ghHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw ghErr(r.status);
+  }
+  async function queueChange(change) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const cur = await ghGetPending();
+      const changes = cur.changes.filter((c) => c.id !== change.id).concat([change]);
+      try {
+        await ghPutPending(changes, cur.sha, `${change.op === 'delete' ? 'Delete' : 'Save'} search: ${change.name || change.id}`);
+        state.pending = changes; applyPending(); return;
+      } catch (e) { if (e.status === 409 && attempt === 0) continue; throw e; }
+    }
+  }
+  function applyPending() {
+    const map = new Map(STATIC.searches.filter((x) => x.data).map((x) => [x.id, { id: x.id, data: x.data }]));
+    for (const c of state.pending || []) {
+      if (c.op === 'delete') map.delete(c.id);
+      else if (c.op === 'upsert' && c.data) map.set(c.id, { id: c.id, data: c.data, pending: true });
+    }
+    state.searches = [...map.values()].sort((a, b) => ((a.data.depart_from || '') < (b.data.depart_from || '') ? -1 : 1));
+  }
+  const ghMessage = (e) => e && e.status === 401 ? 'GitHub didn’t accept your token. Reconnect GitHub with a new one.'
+    : e && (e.status === 403 || e.status === 404) ? 'Your GitHub token can’t save to loz-flights. Check it has Contents: Read and write for that repository.'
+    : 'Couldn’t reach GitHub just now. Check your connection and try again.';
+
+  function openConnect() {
+    state.mode = 'connect';
+    const main = $('#main'); main.replaceChildren();
+    const err = h('p', { class: 'err', role: 'alert' });
+    const input = h('input', { type: 'password', id: 'gh-token', autocomplete: 'off', placeholder: 'github_pat_…' });
+    const form = h('form', { class: 'card editor' },
+      h('h2', { text: 'Connect GitHub to edit' }),
+      h('p', { class: 'muted', text: 'Saving searches here writes them, encrypted with the page password, to the loz-flights repository. GitHub needs a token for that. You only do this once on each device.' }),
+      h('ol', { class: 'small', style: 'margin:0;padding-left:18px;display:grid;gap:6px' },
+        h('li', {}, 'Open ', h('a', { href: 'https://github.com/settings/personal-access-tokens/new', target: '_blank', rel: 'noopener noreferrer', text: 'GitHub’s new fine-grained token page' }), ' (signed in to the account that can edit loz-flights).'),
+        h('li', { text: 'Name it “Loz Flights”, set an expiry, and under Repository access choose Only select repositories, then loz-flights.' }),
+        h('li', { text: 'Under Permissions, set Contents to Read and write. Leave everything else as it is.' }),
+        h('li', { text: 'Generate the token, copy it and paste it below.' })),
+      h('label', { class: 'f' }, 'Token', h('span', { class: 'hint', text: 'Kept in this browser only. Disconnect any time.' }), input),
+      err,
+      h('div', { class: 'formbar' }, h('span'),
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: () => { state.mode = 'view'; render(); } }),
+          h('button', { class: 'btn primary', type: 'submit', id: 'ghSave', text: 'Connect' }))));
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const tok = input.value.trim(); if (!tok) { err.textContent = 'Paste your token first.'; return; }
+      const b = $('#ghSave', form); b.disabled = true; b.textContent = 'Checking…';
+      try {
+        const r = await fetch(`https://api.github.com/repos/${REPO}`, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+        if (!r.ok) throw ghErr(r.status);
+        const j = await r.json();
+        if (!j.permissions || !j.permissions.push) throw ghErr(403);
+        if (!ls.set('loz-gh-token', tok)) { err.textContent = 'This browser won’t store the token (private browsing or blocked site data).'; b.disabled = false; b.textContent = 'Connect'; return; }
+        state.canEdit = !!(await pageKey());
+        try { state.pending = (await ghGetPending()).changes; applyPending(); } catch (x) {}
+        state.mode = 'view'; render();
+      } catch (x) { err.textContent = ghMessage(x); b.disabled = false; b.textContent = 'Connect'; }
+    });
+    main.append(form); input.focus();
+  }
+  const state = { pending: [], db: null, canEdit: false, searches: [], current: null, checks: [], unsubChecks: null, mode: 'view', editing: null, confirmDelete: false };
 
   // ---------- rendering ----------
   function renderBoard() {
@@ -210,7 +313,7 @@
     const head = h('section', { class: 'card' },
       h('div', { class: 'head' },
         h('div', {},
-          h('h2', {}, c.name || 'Untitled search', ' ', h('span', { class: 'pill' + (c.status === 'paused' ? '' : ' live'), text: c.status === 'paused' ? 'Paused' : 'Checking' })),
+          h('h2', {}, c.name || 'Untitled search', ' ', h('span', { class: 'pill' + (c.status === 'paused' ? '' : ' live'), text: c.status === 'paused' ? 'Paused' : 'Checking' }), s.pending ? ' ' : null, s.pending ? h('span', { class: 'pill', text: 'Saved, applies at next check' }) : null),
           h('p', { class: 'muted small', text: latest ? `Last checked ${day(latest.checked)}` : 'Not checked yet. Prices appear after the next Tuesday or Friday check.' })),
         state.canEdit ? h('div', { class: 'actions' },
           h('button', { class: 'btn', type: 'button', text: 'Edit criteria', onclick: () => openEditor(s) }),
@@ -394,28 +497,39 @@
         while (state.searches.some((s) => s.id === id)) id = slug(data.name) + '-' + n++;
         data.created = data.updated;
       } else data.created = state.editing.data.created || data.updated;
-      await state.db.doc('searches/' + id).set(data);
-      state.mode = 'view'; state.current = id; location.hash = id;
+      if (STATIC) await queueChange({ op: 'upsert', id, name: data.name, data, at: data.updated });
+      else await state.db.doc('searches/' + id).set(data);
+      state.mode = 'view'; state.current = id;
+      if (location.hash.slice(1) === id) { watchChecks(); render(); } else location.hash = id;
     } catch (e) {
       btn.disabled = false; btn.textContent = 'Try again';
-      err.textContent = e && e.code === 'invalid_argument' ? 'Only the owner can change searches.' : e && e.code === 'quota_exceeded' ? 'The tracker is full. Delete an old search first.' : 'Couldn’t save just now. Check your connection and try again.';
+      err.textContent = STATIC ? ghMessage(e) : e && e.code === 'invalid_argument' ? 'Only the owner can change searches.' : e && e.code === 'quota_exceeded' ? 'The tracker is full. Delete an old search first.' : 'Couldn’t save just now. Check your connection and try again.';
     }
   }
 
   async function togglePause(s) {
-    try { await state.db.doc('searches/' + s.id).update({ status: s.data.status === 'paused' ? 'active' : 'paused', updated: new Date().toISOString() }); }
-    catch (e) { alertLine('Couldn’t change that just now. Try again.'); }
+    const status = s.data.status === 'paused' ? 'active' : 'paused', updated = new Date().toISOString();
+    try {
+      if (STATIC) { await queueChange({ op: 'upsert', id: s.id, name: s.data.name, data: { ...s.data, status, updated }, at: updated }); render(); }
+      else await state.db.doc('searches/' + s.id).update({ status, updated });
+    } catch (e) { alertLine(STATIC ? ghMessage(e) : 'Couldn’t change that just now. Try again.'); }
   }
 
   async function removeSearch(s) {
     const b = $('#confirmDel'); if (b) { b.disabled = true; b.textContent = 'Deleting…'; }
     try {
+      if (STATIC) {
+        await queueChange({ op: 'delete', id: s.id, name: s.data.name, at: new Date().toISOString() });
+        state.confirmDelete = false; state.current = null; location.hash = ''; fromHash();
+        alertLine(`“${s.data.name}” will be removed from Loz Flights at the next check.`);
+        return;
+      }
       const snap = await state.db.collection(`results/${s.id}/checks`).get();
       for (const d of snap.docs) await state.db.doc(`results/${s.id}/checks/${d.id}`).delete();
       await state.db.doc('results/' + s.id).delete();
       await state.db.doc('searches/' + s.id).delete();
       state.confirmDelete = false; state.current = null; location.hash = '';
-    } catch (e) { if (b) { b.disabled = false; b.textContent = 'Delete search'; } alertLine('Couldn’t delete just now. Try again.'); }
+    } catch (e) { if (b) { b.disabled = false; b.textContent = 'Delete search'; } alertLine(STATIC ? ghMessage(e) : 'Couldn’t delete just now. Try again.'); }
   }
 
   function alertLine(msg) {
@@ -441,6 +555,9 @@
   }
   function render() {
     $('#newBtn').hidden = !state.canEdit;
+    const gb = $('#ghBtn');
+    gb.hidden = !STATIC;
+    gb.textContent = ghToken() ? 'Disconnect GitHub' : 'Connect GitHub to edit';
     renderBoard();
     if (state.mode === 'view') renderView();
   }
@@ -465,12 +582,27 @@
   }
 
   $('#newBtn').addEventListener('click', () => openEditor(null));
+  $('#ghBtn').addEventListener('click', () => {
+    if (ghToken()) { ls.del('loz-gh-token'); state.canEdit = false; state.mode = 'view'; render(); }
+    else openConnect();
+  });
   addEventListener('hashchange', () => { state.mode = 'view'; state.confirmDelete = false; fromHash(); });
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (state.mode === 'view') renderView(); }, 200); });
 
   (async () => {
     if (STATIC) {
-      state.searches = STATIC.searches.filter((s) => s.data).sort((a, b) => ((a.data.depart_from || '') < (b.data.depart_from || '') ? -1 : 1));
+      applyPending();
+      fromHash();
+      const key = await pageKey().catch(() => null);
+      if (!key) return;
+      try {
+        if (ghToken()) { state.pending = (await ghGetPending()).changes; state.canEdit = true; }
+        else {
+          const r = await fetch(PENDING + '?t=' + Date.now(), { cache: 'no-store' });
+          if (r.ok) { const doc = await r.json(); state.pending = doc.ct ? (await decrypt(doc)).changes || [] : []; }
+        }
+      } catch (e) { if (ghToken()) state.canEdit = true; }
+      applyPending();
       fromHash();
       return;
     }
