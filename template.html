@@ -111,6 +111,7 @@
     <div class="actions">
       <button class="btn" id="ghBtn" type="button" hidden>Connect GitHub to edit</button>
       <button class="btn" id="checkAllBtn" type="button" hidden>Check prices now</button>
+      <a class="btn" id="checkInClaude" href="https://claude.ai/artifact/UNZQ2g7YRK22fizaZbka3c" target="_blank" rel="noopener noreferrer" hidden style="text-decoration:none">Check prices now (opens Claude)</a>
       <button class="btn sign" id="newBtn" type="button" hidden>New search</button>
     </div>
   </header>
@@ -360,7 +361,7 @@
           h('h2', {}, c.name || 'Untitled search', ' ', h('span', { class: 'pill' + (c.status === 'paused' ? '' : ' live'), text: c.status === 'paused' ? 'Paused' : 'Checking' }), s.pending ? ' ' : null, s.pending ? h('span', { class: 'pill', text: 'Saved, applies at next check' }) : null),
           h('p', { class: 'muted small', text: latest ? `Last checked ${day(latest.checked)}` : 'Not checked yet. Prices appear after the next Tuesday or Friday check.' })),
         state.canEdit ? h('div', { class: 'actions' },
-          !STATIC && mcpNs ? h('button', { class: 'btn', type: 'button', 'data-check': 'one', text: 'Check this search now', onclick: () => requestCheck(s) }) : null,
+          !STATIC ? h('button', { class: 'btn', type: 'button', 'data-check': 'one', text: 'Check this search now', onclick: () => requestCheck(s) }) : null,
           h('button', { class: 'btn', type: 'button', text: 'Edit criteria', onclick: () => openEditor(s) }),
           h('button', { class: 'btn', type: 'button', text: c.status === 'paused' ? 'Resume checks' : 'Pause checks', onclick: () => togglePause(s) }),
           h('button', { class: 'btn danger', type: 'button', text: 'Delete', onclick: () => { state.confirmDelete = true; renderView(); } })) : null),
@@ -588,6 +589,8 @@
   const recentRequest = () => state.lastRequest && Date.now() - Date.parse(state.lastRequest.at) < CHECK_COOLDOWN ? state.lastRequest : null;
   const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   async function requestCheck(search) {
+    if (!mcpNs) mcpNs = await window.claude?.use?.('mcp').catch(() => null);
+    if (!mcpNs) { alertLine('Starting a check isn’t available in this view. Open Loz Flights in Claude on the web or in the desktop app and try again.'); return; }
     const btns = [...document.querySelectorAll('[data-check]')];
     btns.forEach((b) => { b.disabled = true; b.textContent = 'Starting…'; });
     const text = search
@@ -643,7 +646,8 @@
     gb.hidden = !STATIC;
     gb.textContent = ls.get('loz-gh-token') ? 'Disconnect GitHub' : sharedToken ? 'Shared editing on' : 'Connect GitHub to edit';
     const cb = $('#checkAllBtn');
-    cb.hidden = !(state.canEdit && !STATIC && mcpNs);
+    cb.hidden = !(state.canEdit && !STATIC);
+    $('#checkInClaude').hidden = !STATIC;
     cb.dataset.check = 'all';
     renderBoard();
     if (state.mode === 'view') renderView();
