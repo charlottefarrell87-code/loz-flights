@@ -38,21 +38,27 @@
 <div class="wrap">
   <header>
     <h1>Melbourne fares from Europe</h1>
-    <p class="sub">Return economy for 1 adult: land in Melbourne by 24 Jan 2027, back in the UK by 26 Apr. Checked on Google Flights every Tuesday and Friday. Last checked <b id="checked">—</b>.</p>
+    <p class="sub">Return for 1 adult for the tennis: out 21 to 23 Jan 2027 landing by 24 Jan, home around 25 or 26 Apr. Checked on Google Flights every Tuesday and Friday. Last checked <b id="checked">—</b>.</p>
   </header>
   <section class="tiles">
-    <div class="card"><p class="label">Cheapest from anywhere in Europe</p><p class="big" id="best">—</p><p class="note" id="bestNote">—</p></div>
-    <div class="card"><p class="label">Cheapest from the UK</p><p class="big" id="uk">—</p><p class="note" id="ukNote">—</p></div>
-    <div class="card"><p class="label">Change since previous check</p><p class="big" id="delta">—</p><p class="note">Cheapest fare against the check before</p></div>
+    <div class="card"><p class="label">Cheapest economy, anywhere in Europe</p><p class="big" id="best">—</p><p class="note" id="bestNote">—</p></div>
+    <div class="card"><p class="label">Cheapest economy from the UK</p><p class="big" id="uk">—</p><p class="note" id="ukNote">—</p></div>
+    <div class="card"><p class="label">Best value business class</p><p class="big" id="biz">—</p><p class="note" id="bizNote">—</p></div>
+    <div class="card"><p class="label">Economy change since previous check</p><p class="big" id="delta">—</p><p class="note">Cheapest fare against the check before</p></div>
   </section>
   <section class="grid">
-    <div class="card"><h2>Cheapest return by airport</h2><p class="note">Latest check. Non-UK airports need a flight there and back, not included.</p><div class="chart" id="bars"></div></div>
-    <div class="card"><h2>Cheapest fare over time</h2><p class="note">Lowest fare from anywhere on each check</p><div class="chart" id="line"></div></div>
+    <div class="card"><h2>Cheapest economy return by airport</h2><p class="note">Latest check. Non-UK airports need a flight there and back, not included.</p><div class="chart" id="bars"></div></div>
+    <div class="card"><h2>Cheapest economy fare over time</h2><p class="note">Lowest economy fare from anywhere on each check</p><div class="chart" id="line"></div></div>
   </section>
   <section class="card">
-    <h2>Every airport, latest check</h2>
-    <p class="note">Cheapest in green. Hours are the outbound journey.</p>
-    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Back</th><th>Airline</th><th>Stops</th><th class="num">Hours</th><th class="num">Price</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <h2>Economy, every airport</h2>
+    <p class="note">Cheapest in green. Hours and layover are for the flight out; check the return leg when booking.</p>
+    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Lands</th><th>Back</th><th>Airline</th><th>Layover</th><th class="num">Hours</th><th class="num">Price</th></tr></thead><tbody id="rows"></tbody></table></div>
+  </section>
+  <section class="card">
+    <h2>Business class</h2>
+    <p class="note">Lowest business fare found from each airport checked.</p>
+    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Lands</th><th>Back</th><th>Airline</th><th>Layover</th><th class="num">Hours</th><th class="num">Price</th></tr></thead><tbody id="bizrows"></tbody></table></div>
   </section>
   <p class="foot">Prices from Google Flights, indicative and may change at booking. <button class="lock" id="lockBtn" type="button">Lock this device</button></p>
 </div>
@@ -67,27 +73,32 @@ const NS = 'http://www.w3.org/2000/svg';
 const el = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; };
 
 const lastCheck = FARES.reduce((m, r) => (r.checked > m ? r.checked : m), '');
-const latest = FARES.filter((r) => r.checked === lastCheck).sort((a, b) => a.price - b.price);
-const checks = [...new Set(FARES.map((r) => r.checked))].sort();
-const history = checks.map((c) => ({ checked: c, price: Math.min(...FARES.filter((r) => r.checked === c).map((r) => r.price)) }));
+const cab = (r) => r.cabin || 'Economy';
+const latest = FARES.filter((r) => r.checked === lastCheck && cab(r) === 'Economy').sort((a, b) => a.price - b.price);
+const biz = FARES.filter((r) => r.checked === lastCheck && cab(r) === 'Business').sort((a, b) => a.price - b.price);
+const econ = FARES.filter((r) => cab(r) === 'Economy');
+const checks = [...new Set(econ.map((r) => r.checked))].sort();
+const history = checks.map((c) => ({ checked: c, price: Math.min(...econ.filter((r) => r.checked === c).map((r) => r.price)) }));
 const best = latest[0], bestUk = latest.find((r) => r.uk);
 
 $('checked').textContent = day(lastCheck);
 if (best) { $('best').textContent = gbp(best.price); $('bestNote').textContent = `${best.origin}, ${best.airlines}, ${best.stops}`; }
 if (bestUk) { $('uk').textContent = gbp(bestUk.price); $('ukNote').textContent = `${bestUk.origin}, no positioning flight needed`; }
+if (biz[0]) { $('biz').textContent = gbp(biz[0].price); $('bizNote').textContent = `${biz[0].origin}, ${biz[0].airlines}`; }
 if (history.length > 1) {
   const d = history.at(-1).price - history.at(-2).price;
   $('delta').textContent = d === 0 ? 'No change' : (d > 0 ? '+' : '−') + gbp(Math.abs(d));
   $('delta').className = 'big ' + (d > 0 ? 'up' : d < 0 ? 'down' : '');
 } else $('delta').textContent = 'First check';
 
-for (const r of latest) {
-  const tr = document.createElement('tr'); if (r === best) tr.className = 'best';
-  [`${r.origin} (${r.code})`, day(r.depart), day(r.return), r.airlines, r.stops, r.hours.toFixed(1), gbp(r.price)].forEach((v, i) => {
-    const td = document.createElement('td'); td.textContent = v; if (i >= 5) td.className = 'num'; tr.appendChild(td);
+const fill = (tbody, rows) => { const min = Math.min(...rows.map((r) => r.price)); for (const r of rows) {
+  const tr = document.createElement('tr'); if (r.price === min) tr.className = 'best';
+  [`${r.origin} (${r.code})`, day(r.depart), r.arrives ? day(r.arrives) : '—', day(r.return), r.airlines, r.layover || r.stops || '—', r.hours.toFixed(1), gbp(r.price)].forEach((v, i) => {
+    const td = document.createElement('td'); td.textContent = v; if (i >= 6) td.className = 'num'; tr.appendChild(td);
   });
-  $('rows').appendChild(tr);
-}
+  tbody.appendChild(tr);
+} };
+fill($('rows'), latest); fill($('bizrows'), biz);
 
 function tip(box, a, b, x, y) {
   let t = box.querySelector('.tip'); if (!t) { t = document.createElement('div'); t.className = 'tip'; box.appendChild(t); }
