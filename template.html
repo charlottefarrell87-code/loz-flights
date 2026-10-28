@@ -29,6 +29,8 @@
   th { color:var(--muted); font-size:13px; font-weight:600; }
   .num { text-align:right; }
   tr.best td { color:var(--ok); font-weight:600; }
+  td a.btn { display:inline-block; background:var(--accent); color:#fff; text-decoration:none; border-radius:6px; padding:4px 10px; font-size:13px; font-weight:600; }
+  td a.sub { color:var(--muted); font-size:12px; margin-left:8px; }
   .up { color:var(--bad); } .down { color:var(--ok); }
   .foot { color:var(--muted); font-size:12px; }
   .lock { background:none; border:1px solid var(--line); color:var(--muted); border-radius:6px; padding:4px 10px; font:inherit; font-size:12px; cursor:pointer; }
@@ -52,13 +54,13 @@
   </section>
   <section class="card">
     <h2>Economy, every airport</h2>
-    <p class="note">Cheapest in green. Hours and layover are for the flight out; check the return leg when booking.</p>
-    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Lands</th><th>Back</th><th>Airline</th><th>Layover</th><th class="num">Hours</th><th class="num">Price</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <p class="note">Cheapest in green. Hours and layover are for the flight out; check the return leg when booking. Book opens the airline's own site; Compare opens the exact Google Flights search.</p>
+    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Lands</th><th>Back</th><th>Airline</th><th>Layover</th><th class="num">Hours</th><th class="num">Price</th><th>Book</th></tr></thead><tbody id="rows"></tbody></table></div>
   </section>
   <section class="card">
     <h2>Business class</h2>
-    <p class="note">Lowest business fare found from each airport checked.</p>
-    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Lands</th><th>Back</th><th>Airline</th><th>Layover</th><th class="num">Hours</th><th class="num">Price</th></tr></thead><tbody id="bizrows"></tbody></table></div>
+    <p class="note">Lowest business fare found from each airport checked. Book opens the airline's own site.</p>
+    <div class="tablewrap"><table><thead><tr><th>From</th><th>Out</th><th>Lands</th><th>Back</th><th>Airline</th><th>Layover</th><th class="num">Hours</th><th class="num">Price</th><th>Book</th></tr></thead><tbody id="bizrows"></tbody></table></div>
   </section>
   <p class="foot">Prices from Google Flights, indicative and may change at booking. <button class="lock" id="lockBtn" type="button">Lock this device</button></p>
 </div>
@@ -96,6 +98,12 @@ const fill = (tbody, rows) => { const min = Math.min(...rows.map((r) => r.price)
   [`${r.origin} (${r.code})`, day(r.depart), r.arrives ? day(r.arrives) : '—', day(r.return), r.airlines, r.layover || r.stops || '—', r.hours.toFixed(1), gbp(r.price)].forEach((v, i) => {
     const td = document.createElement('td'); td.textContent = v; if (i >= 6) td.className = 'num'; tr.appendChild(td);
   });
+  const bt = document.createElement('td');
+  const link = (href, label, cls) => { const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = label; a.className = cls; bt.appendChild(a); };
+  if (r.book_url) link(r.book_url, 'Book with ' + r.book_with, 'btn');
+  if (r.search_url) link(r.search_url, 'Compare', 'sub');
+  if (!bt.childNodes.length) bt.textContent = '—';
+  tr.appendChild(bt);
   tbody.appendChild(tr);
 } };
 fill($('rows'), latest); fill($('bizrows'), biz);
