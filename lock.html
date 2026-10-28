@@ -20,10 +20,11 @@
 </style>
 </head>
 <body>
-<form class="box" id="f">
+<form class="box" id="f" action="#" method="post">
   <h1>Loz flights</h1>
   <p>This page is private. Enter the password to see the fares.</p>
-  <input type="password" id="pw" autocomplete="current-password" aria-label="Password" placeholder="Password" required autofocus>
+  <input type="text" id="user" name="username" autocomplete="username" value="loz-flights" readonly hidden aria-hidden="true" tabindex="-1">
+  <input type="password" id="pw" name="password" autocomplete="current-password" aria-label="Password" placeholder="Password" required autofocus>
   <label><input type="checkbox" id="remember"> Remember on this device</label>
   <button type="submit">Unlock</button>
   <div class="err" id="err" role="alert"></div>
@@ -46,7 +47,20 @@ async function unlock(raw) {
 (async () => {
   let saved = null;
   try { saved = localStorage.getItem('loz-key'); } catch (_) {}
-  if (!saved) return;
+  if (!saved) {
+    // No remembered key: ask the browser's password manager (Chrome, Edge, Android) without prompting.
+    try {
+      if (window.PasswordCredential && navigator.credentials) {
+        const cred = await navigator.credentials.get({ password: true, mediation: 'silent' });
+        if (cred && cred.password) {
+          const raw = await deriveRaw(cred.password);
+          try { localStorage.setItem('loz-key', JSON.stringify({ salt: P.salt, k: toB64(raw) })); } catch (_) {}
+          await unlock(raw);
+        }
+      }
+    } catch (_) {}
+    return;
+  }
   try { const s = JSON.parse(saved); await unlock(b64(s.k)); }
   catch (e) {
     try { localStorage.removeItem('loz-key'); } catch (_) {}
@@ -65,6 +79,9 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(P.iv) }, key, b64(P.ct));
     let stored = false;
     if (remember) { try { localStorage.setItem('loz-key', JSON.stringify({ salt: P.salt, k: toB64(raw) })); stored = localStorage.getItem('loz-key') !== null; } catch (_) {} }
+    if (remember && window.PasswordCredential && navigator.credentials) {
+      try { await navigator.credentials.store(new PasswordCredential({ id: 'loz-flights', password: document.getElementById('pw').value, name: 'Loz Flights' })); } catch (_) {}
+    }
     if (remember && !stored) { err.textContent = 'This browser won’t let the page remember you (private browsing or blocked site data). Opening anyway…'; await new Promise((r) => setTimeout(r, 1500)); }
     await unlock(raw);
   } catch (x) { err.textContent = 'That password didn’t work. Try again.'; }
