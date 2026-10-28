@@ -110,6 +110,7 @@
     </div>
     <div class="actions">
       <button class="btn" id="ghBtn" type="button" hidden>Connect GitHub to edit</button>
+      <button class="btn" id="checkAllBtn" type="button" hidden>Check prices now</button>
       <button class="btn sign" id="newBtn" type="button" hidden>New search</button>
     </div>
   </header>
@@ -249,7 +250,7 @@
     });
     main.append(form); input.focus();
   }
-  const state = { pending: [], db: null, canEdit: false, searches: [], current: null, checks: [], unsubChecks: null, mode: 'view', editing: null, confirmDelete: false };
+  const state = { lastRequest: null, pending: [], db: null, canEdit: false, searches: [], current: null, checks: [], unsubChecks: null, mode: 'view', editing: null, confirmDelete: false };
 
   // ---------- rendering ----------
   function renderBoard() {
@@ -316,6 +317,7 @@
           h('h2', {}, c.name || 'Untitled search', ' ', h('span', { class: 'pill' + (c.status === 'paused' ? '' : ' live'), text: c.status === 'paused' ? 'Paused' : 'Checking' }), s.pending ? ' ' : null, s.pending ? h('span', { class: 'pill', text: 'Saved, applies at next check' }) : null),
           h('p', { class: 'muted small', text: latest ? `Last checked ${day(latest.checked)}` : 'Not checked yet. Prices appear after the next Tuesday or Friday check.' })),
         state.canEdit ? h('div', { class: 'actions' },
+          !STATIC && mcpNs ? h('button', { class: 'btn', type: 'button', 'data-check': 'one', text: 'Check this search now', onclick: () => requestCheck(s) }) : null,
           h('button', { class: 'btn', type: 'button', text: 'Edit criteria', onclick: () => openEditor(s) }),
           h('button', { class: 'btn', type: 'button', text: c.status === 'paused' ? 'Resume checks' : 'Pause checks', onclick: () => togglePause(s) }),
           h('button', { class: 'btn danger', type: 'button', text: 'Delete', onclick: () => { state.confirmDelete = true; renderView(); } })) : null),
@@ -536,6 +538,45 @@
     const n = h('p', { class: 'notice', role: 'alert', text: msg }); $('#main').prepend(n); setTimeout(() => n.remove(), 6000);
   }
 
+  // ---------- manual price checks (Loz Flights in Claude only) ----------
+  // Starts the twice-weekly scheduled task straight away through the viewer's Claude Code Remote connection.
+  const TRIGGER = 'trig_01Rs1Pjv1GrpD6ofKdSeNzvH', CHECK_COOLDOWN = 30 * 60 * 1000;
+  let mcpNs = null;
+  const recentRequest = () => state.lastRequest && Date.now() - Date.parse(state.lastRequest.at) < CHECK_COOLDOWN ? state.lastRequest : null;
+  const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  async function requestCheck(search) {
+    const btns = [...document.querySelectorAll('[data-check]')];
+    btns.forEach((b) => { b.disabled = true; b.textContent = 'Starting…'; });
+    const text = search
+      ? `Manual check requested from Loz Flights for one search only: "${search.data.name}" (id ${search.id}). Do step 0, then steps 1 to 6 for that search only (update the Melbourne dashboard only if it is australian-open-2027), still rebuild the GitHub copy with every search, and keep the summary short.`
+      : 'Manual check requested from Loz Flights: run every step now as normal.';
+    try {
+      await mcpNs.callTool('Claude Code Remote', 'fire_trigger', { trigger_id: TRIGGER, text }, { cache: false });
+      const at = new Date().toISOString();
+      state.lastRequest = { at, search: search ? search.id : null, name: search ? search.data.name : 'all searches' };
+      try { await state.db.doc('meta/manual-check').set(state.lastRequest); } catch (e) {}
+      alertLine(`Price check started for ${search ? '“' + search.data.name + '”' : 'all searches'}. New prices usually appear here within an hour, and you’ll get a notification.`);
+    } catch (e) {
+      const code = e && e.code;
+      const msg = code === 'server_not_connected' || code === 'selection_required' ? 'Claude Code Remote isn’t connected for you. Add it in claude.ai Settings, Connectors, then try again.'
+        : code === 'needs_reauth' ? 'Reconnect Claude Code Remote in claude.ai Settings, Connectors, then try again.'
+        : code === 'not_in_manifest' ? 'This page isn’t allowed to start checks for you. Allow Claude Code Remote in the page’s permissions to use this button.'
+        : code === 'blocked_by_policy' || code === 'approval_required' ? 'Your organisation’s settings don’t allow starting checks from this page.'
+        : code === 'tool_error' ? 'Claude couldn’t start the check: ' + (e.message || 'the scheduled task refused it') + '.'
+        : 'Couldn’t confirm the check started. Look for a new run of “Loz Flights fare check” in your scheduled tasks before trying again.';
+      alertLine(msg);
+    }
+    renderCheckButtons();
+  }
+  function renderCheckButtons() {
+    const recent = recentRequest();
+    for (const b of document.querySelectorAll('[data-check]')) {
+      b.disabled = !!recent;
+      b.textContent = recent ? `Check started ${timeOf(recent.at)}` : b.dataset.check === 'all' ? 'Check prices now' : 'Check this search now';
+      b.title = recent ? 'A check was started in the last 30 minutes. New prices appear when it finishes.' : '';
+    }
+  }
+
   // ---------- data flow ----------
   function select(id) {
     state.mode = 'view'; state.confirmDelete = false;
@@ -558,8 +599,12 @@
     const gb = $('#ghBtn');
     gb.hidden = !STATIC;
     gb.textContent = ghToken() ? 'Disconnect GitHub' : 'Connect GitHub to edit';
+    const cb = $('#checkAllBtn');
+    cb.hidden = !(state.canEdit && !STATIC && mcpNs);
+    cb.dataset.check = 'all';
     renderBoard();
     if (state.mode === 'view') renderView();
+    renderCheckButtons();
   }
   function fromHash() {
     let want = decodeURIComponent(location.hash.slice(1));
@@ -582,6 +627,7 @@
   }
 
   $('#newBtn').addEventListener('click', () => openEditor(null));
+  $('#checkAllBtn').addEventListener('click', () => requestCheck(null));
   $('#ghBtn').addEventListener('click', () => {
     if (ghToken()) { ls.del('loz-gh-token'); state.canEdit = false; state.mode = 'view'; render(); }
     else openConnect();
@@ -613,6 +659,10 @@
     }
     state.db = db;
     state.canEdit = user ? ((await user.canEdit()) || (await user.isOwner())) : false;
+    if (state.canEdit) {
+      window.claude.use('mcp').then((m) => { mcpNs = m; render(); }).catch(() => {});
+      db.doc('meta/manual-check').onSnapshot((snap) => { state.lastRequest = snap.exists ? snap.data() : null; renderCheckButtons(); }, () => {});
+    }
     db.collection('searches').onSnapshot((snap) => {
       state.searches = snap.docs.filter((d) => d.exists).map((d) => ({ id: d.id, data: d.data() }))
         .sort((a, b) => ((a.data.depart_from || '') < (b.data.depart_from || '') ? -1 : 1));
