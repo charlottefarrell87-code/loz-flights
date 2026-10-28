@@ -24,7 +24,8 @@
 
   * { box-sizing: border-box; }
   body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
-  .wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 56px; display: grid; gap: 20px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .wrap > *, #main, #main > * { min-width: 0; }
   h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
   h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; }
   h2 { font-size: 22px; font-weight: 700; }
