@@ -153,7 +153,7 @@
     for (const s of state.searches) {
       const c = s.data;
       board.append(h('button', { class: 'tab', type: 'button', 'aria-current': String(s.id === state.current && state.mode !== 'new'), onclick: () => select(s.id) },
-        h('span', { class: 'route', text: `${(c.origins || []).length > 2 ? 'EUROPE' : (c.origins || []).join('/')} → ${c.dest || ''}` }),
+        h('span', { class: 'route', text: `${(c.origins || []).length > 2 ? 'EUROPE' : (c.origins || []).join('/')} → ${c.dest || ''}${c.home_from && c.home_from !== c.dest ? ' · ' + c.home_from + ' → home' : ''}` }),
         h('span', { class: 'nm', text: c.name || 'Untitled search' }),
         h('span', { class: 'st', text: `${short(c.depart_from)} to ${short(c.return_to || c.return_from)}${c.status === 'paused' ? ' · paused' : ''}` })));
     }
@@ -164,6 +164,7 @@
     return h('div', { class: 'chips' },
       chip('From', (c.origins || []).join(', ')),
       chip('To', c.dest),
+      c.home_from && c.home_from !== c.dest ? chip('Fly home from', c.home_from) : null,
       chip('Out', `${day(c.depart_from)} to ${day(c.depart_to)}`),
       chip('Land by', day(c.land_by)),
       chip('Home', `${day(c.return_from)} to ${day(c.return_to)}`),
@@ -253,8 +254,9 @@
           h('td', { class: 'num mono', text: r.hours != null ? Number(r.hours).toFixed(1) : '—' }),
           h('td', { class: 'num mono price', text: gbp(r.price) }),
           h('td', {}, r.book_url ? h('a', { class: 'book', href: r.book_url, target: '_blank', rel: 'noopener noreferrer', text: 'Book with ' + (r.book_with || r.airlines) }) : '—',
-            r.search_url ? h('a', { class: 'cmp', href: r.search_url, target: '_blank', rel: 'noopener noreferrer', text: 'Compare' }) : null))))))) : null;
-    main.append(table('Economy', econ), table('Premium economy', prem), table('Business class', biz), table('First class', first));
+            r.search_url ? h('a', { class: 'cmp', href: r.search_url, target: '_blank', rel: 'noopener noreferrer', text: 'Compare' }) : null)))))),
+      list.some((r) => r.note) ? h('ul', { class: 'muted small', style: 'margin:10px 0 0;padding-left:18px' }, list.filter((r) => r.note).map((r) => h('li', { text: `${r.origin}: ${r.note}` }))) : null) : null;
+    main.append(...[table('Economy', econ), table('Premium economy', prem), table('Business class', biz), table('First class', first)].filter(Boolean));
     drawBars(barsBox, mainCab);
     drawLine(lineBox, history);
   }
@@ -324,6 +326,7 @@
           field('Name', h('input', { type: 'text', id: 'f-name', required: true, value: c.name || '', placeholder: 'Australian Open 2027' })),
           field('From airports', h('input', { type: 'text', id: 'f-origins', required: true, value: (c.origins || []).join(', '), placeholder: 'MAN, LHR, DUB, AMS' }), 'Airport codes, separated by commas'),
           field('To airport', h('input', { type: 'text', id: 'f-dest', required: true, value: c.dest || '', placeholder: 'MEL', maxlength: '3' })),
+          field('Fly home from', h('input', { type: 'text', id: 'f-home-from', value: c.home_from || '', placeholder: 'Same as To', maxlength: '3' }), 'Only if different, e.g. KUL'),
           field('Adults', h('input', { type: 'number', id: 'f-adults', min: '1', max: '9', value: c.adults || 1 })))),
       h('fieldset', {}, h('legend', { text: 'Dates' }),
         h('div', { class: 'fields' },
@@ -364,7 +367,7 @@
     const origins = v('f-origins').toUpperCase().split(/[\s,]+/).filter(Boolean);
     const cabins = [...form.querySelectorAll('input[id^="f-cab-"]:checked')].map((x) => x.value);
     const data = {
-      name: v('f-name'), origins, dest: v('f-dest').toUpperCase(), adults: Number(v('f-adults')) || 1,
+      name: v('f-name'), origins, dest: v('f-dest').toUpperCase(), home_from: v('f-home-from').toUpperCase() || null, adults: Number(v('f-adults')) || 1,
       depart_from: v('f-dep-from'), depart_to: v('f-dep-to'), land_by: v('f-land-by') || null,
       return_from: v('f-ret-from'), return_to: v('f-ret-to'), ideal_return: [v('f-ideal1'), v('f-ideal2')].filter(Boolean), home_by: v('f-home-by') || null,
       cabins, max_stops: v('f-stops') === '' ? null : Number(v('f-stops')), max_hours: Number(v('f-hours')) || null,
@@ -374,6 +377,7 @@
     };
     const bad = !origins.every((o) => /^[A-Z]{3}$/.test(o)) ? 'Use three-letter airport codes for From, e.g. MAN, LHR.'
       : !/^[A-Z]{3}$/.test(data.dest) ? 'Use a three-letter airport code for To, e.g. MEL.'
+      : data.home_from && !/^[A-Z]{3}$/.test(data.home_from) ? 'Use a three-letter airport code for Fly home from, e.g. KUL, or leave it empty.'
       : !cabins.length ? 'Pick at least one cabin.'
       : data.depart_to < data.depart_from ? 'Leave by must be on or after Leave from.'
       : data.return_to < data.return_from ? 'Fly home by must be on or after Fly home from.'
