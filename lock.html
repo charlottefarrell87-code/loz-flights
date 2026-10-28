@@ -42,7 +42,20 @@ async function unlock(raw) {
   const html = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(P.iv) }, key, b64(P.ct)));
   // Kept for this tab only, so the unlocked page can encrypt searches you save from it.
   try { sessionStorage.setItem('loz-k', toB64(raw)); } catch (_) {}
-  document.open(); document.write(html); document.close();
+  mount(html);
+}
+// Swap this sign-in page for the unlocked page without document.write, which some
+// browsers merge into the current page instead of replacing it.
+function mount(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const fresh = (old) => { const n = document.createElement('script'); for (const a of old.attributes) n.setAttribute(a.name, a.value); n.textContent = old.textContent; return n; };
+  const head = document.adoptNode(doc.head), body = document.adoptNode(doc.body);
+  for (const sc of [...head.querySelectorAll('script'), ...body.querySelectorAll('script')]) sc.replaceWith(fresh(sc));
+  if (doc.documentElement.lang) document.documentElement.lang = doc.documentElement.lang;
+  document.documentElement.removeAttribute('style');
+  document.head.replaceWith(head);
+  document.body.replaceWith(body);
+  window.scrollTo(0, 0);
 }
 (async () => {
   let saved = null;
