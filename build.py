@@ -38,7 +38,15 @@ page = (
     "</body></html>"
 )
 
-salt, iv = os.urandom(16), os.urandom(12)
+# The salt stays the same between builds (salt.b64, committed) so a device that ticked
+# "Remember on this device" keeps working after each fare check. It is not secret.
+salt_file = here / "salt.b64"
+if salt_file.exists():
+    salt = base64.b64decode(salt_file.read_text().strip())
+else:
+    salt = os.urandom(16)
+    salt_file.write_text(base64.b64encode(salt).decode() + "\n")
+iv = os.urandom(12)
 key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(password.encode())
 ct = AESGCM(key).encrypt(iv, page.encode(), None)
 b = lambda x: base64.b64encode(x).decode()
