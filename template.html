@@ -107,6 +107,9 @@
   table.fares td.from { min-width: 110px; white-space: normal; }
   @media (min-width: 720px) { .f.wide { grid-column: span 2; } }
 
+  .bestday { border-left: 4px solid var(--sign); }
+  .bestday h2 { font-size: 20px; }
+  .bestday a.book { padding: 8px 16px; font-size: 14px; }
   .empty { text-align: center; padding: 40px 20px; display: grid; gap: 10px; justify-items: center; }
   .notice { border-left: 4px solid var(--sign); background: var(--panel); border-radius: 0 var(--r) var(--r) 0; padding: 12px 16px; }
 
@@ -151,7 +154,7 @@
   <header class="top">
     <div>
       <h1>Loz Flights</h1>
-      <p class="muted small">Saved fare searches, checked on Google Flights every Tuesday and Friday morning.</p>
+      <p class="muted small">Saved fare searches, checked on Google Flights every morning.</p>
     </div>
     <div class="actions">
       <button class="btn" id="ghBtn" type="button" hidden>Connect GitHub to edit</button>
@@ -206,7 +209,7 @@
 
   // ---------- GitHub saving (the password-protected site only) ----------
   // Changes made on the site are encrypted with the page password and saved to the
-  // repository as pending.enc.json; the twice-weekly check applies them to Loz Flights.
+  // repository as pending.enc.json; the daily check applies them to Loz Flights.
   const REPO = 'charlottefarrell87-code/loz-flights', PENDING = 'pending.enc.json';
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
   const toB64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
@@ -387,7 +390,7 @@
     if (!s) {
       main.append(h('section', { class: 'card empty' },
         h('h2', { text: 'No saved searches yet' }),
-        h('p', { class: 'muted', text: 'Create a search with your dates and preferences. Prices appear after the next Tuesday or Friday check.' }),
+        h('p', { class: 'muted', text: 'Create a search with your dates and preferences. Prices appear after the next daily check.' }),
         state.canEdit ? h('button', { class: 'btn sign', type: 'button', text: 'New search', onclick: () => openEditor(null) }) : null));
       return;
     }
@@ -411,9 +414,8 @@
       h('div', { class: 'head' },
         h('div', {},
           h('h2', {}, c.name || 'Untitled search', h('span', { class: 'pill' + (c.status === 'paused' ? '' : ' live'), text: c.status === 'paused' ? 'Paused' : 'Checking' }), s.pending ? h('span', { class: 'pill', text: 'Saved, applies at next check' }) : null),
-          h('p', { class: 'muted small', text: latest ? `Last checked ${day(latest.checked)}` : 'Not checked yet. Prices appear after the next Tuesday or Friday check.' })),
+          h('p', { class: 'muted small', text: latest ? `Last checked ${day(latest.checked)}` : 'Not checked yet. Prices appear after the next daily check.' })),
         state.canEdit ? h('div', { class: 'actions' },
-          !STATIC ? h('button', { class: 'btn', type: 'button', 'data-check': 'one', text: 'Check this search now', onclick: () => requestCheck(s) }) : null,
           h('button', { class: 'btn', type: 'button', text: 'Edit criteria', onclick: () => openEditor(s) }),
           h('button', { class: 'btn', type: 'button', text: c.status === 'paused' ? 'Resume checks' : 'Pause checks', onclick: () => togglePause(s) }),
           h('button', { class: 'btn danger', type: 'button', text: 'Delete', onclick: () => { state.confirmDelete = true; renderView(); } })) : null),
@@ -431,6 +433,9 @@
     const change = history.length > 1 ? history[history.length - 1].price - history[history.length - 2].price : null;
     const label = mainCab[0] ? cab(mainCab[0]).toLowerCase() : 'economy';
     const tile = (lab, big, note, cls) => h('div', { class: 'card tile' }, h('p', { class: 'lab', text: lab }), h('p', { class: 'big ' + (cls || ''), text: big }), h('p', { class: 'muted small', text: note }));
+    // Filled once the booking-link helpers below exist.
+    const bestBox = h('section', { class: 'card bestday', style: 'margin-top:12px' });
+    main.append(bestBox);
     main.append(h('section', { class: 'tiles', style: 'margin-top:12px' },
       tile(`Cheapest ${label}, any airport`, cheapest ? gbp(cheapest.price) : '—', cheapest ? `${cheapest.origin} with ${cheapest.airlines}` : 'None found'),
       tile(`Cheapest ${label} from the UK`, ukBest ? gbp(ukBest.price) : '—', ukBest ? `${ukBest.origin} with ${ukBest.airlines}` : 'None found from the UK'),
@@ -439,9 +444,16 @@
 
     const barsBox = h('div', { class: 'chart', id: 'bars' });
     const lineBox = h('div', { class: 'chart', id: 'line' });
+    const datesBox = h('div', { class: 'chart', id: 'dates' });
+    // The trend covers the 30 days up to the latest check; by_date is the cheapest fare for each departure day in that check.
+    const monthAgo = +dt(latest.checked) - 30 * 864e5;
+    const month = history.filter((p) => +dt(p.checked) >= monthAgo);
+    const byDate = (latest.by_date || []).filter((d) => d && d.date && d.price > 0).sort((a, b) => (a.date < b.date ? -1 : 1));
     main.append(h('section', { class: 'grid2', style: 'margin-top:12px' },
-      h('div', { class: 'card' }, h('h3', { text: `Cheapest ${label} by airport` }), h('p', { class: 'muted small', text: 'Latest check. Non-UK airports need a flight there and back, not included.' }), barsBox),
-      h('div', { class: 'card' }, h('h3', { text: `Cheapest ${label} over time` }), h('p', { class: 'muted small', text: 'Lowest fare from any airport on each check' }), lineBox)));
+      h('div', { class: 'card' }, h('h3', { text: `Cheapest ${label} over the last 30 days` }), h('p', { class: 'muted small', text: 'Lowest fare from any airport in each day’s search' }), lineBox),
+      h('div', { class: 'card' }, h('h3', { text: `Cheapest ${label} by travel date` }),
+        h('p', { class: 'muted small', text: byDate.length ? `Cheapest fare for each day you could fly out, from the ${day(latest.checked)} search` : 'Appears after the next daily check.' }), datesBox),
+      h('div', { class: 'card' }, h('h3', { text: `Cheapest ${label} by airport` }), h('p', { class: 'muted small', text: 'Latest check. Non-UK airports need a flight there and back, not included.' }), barsBox)));
 
     // One result = two lines: the flight out and the flight home, sharing price and booking.
     const plusDays = (from, to) => from && to && daysBetween(from, to) > 0 ? h('span', { class: 'plus', text: '+' + daysBetween(from, to) }) : null;
@@ -520,9 +532,30 @@
               ...legCells(back)));
         }))),
       null) : null;
+    // Best option from the latest daily search: the check's own pick (it weighs layovers, ideal days and journey time), else the cheapest fare.
+    const pick = latest.best || {};
+    const best = rows.find((r) => r.code === pick.code && cab(r) === (pick.cabin || cab(r))) || cheapest;
+    if (best) {
+      const out = legOf(best, 'out'), back = legOf(best, 'back');
+      const legLine = (tag, l) => h('p', { class: 'small' }, h('span', { class: 'legtag', style: 'margin-right:8px', text: tag }),
+        `${day(l.date)}${l.dep_time ? ' ' + l.dep_time : ''}${l.airlines ? ', ' + l.airlines : ''}${l.layover ? ', ' + l.layover : l.stops ? ', ' + l.stops : ''}${l.hours != null ? ', ' + Number(l.hours).toFixed(1) + 'h' : ''}`);
+      const link = best.booking_url || gfLink(best);
+      bestBox.append(h('div', { class: 'head' },
+        h('div', { style: 'display:grid;gap:6px' },
+          h('p', { class: 'lab muted small', text: `Best option on ${day(latest.checked)}` }),
+          h('h2', {}, `${best.origin} to ${apLabel(c.dest)}, ${cab(best).toLowerCase()}`),
+          legLine('Out', out), legLine('Home', back),
+          pick.why ? h('p', { class: 'muted small', text: pick.why }) : null,
+          ukBest && ukBest !== best && !best.uk ? h('p', { class: 'muted small', text: `Best from the UK: ${gbp(ukBest.price)} from ${ukBest.origin} with ${ukBest.airlines}.` }) : null),
+        h('div', { style: 'display:grid;gap:8px;justify-items:end' },
+          h('p', { class: 'big mono', style: 'font-size:34px;font-weight:600;margin:0', text: gbp(best.price) }),
+          best.note ? h('p', { class: 'muted small', style: 'max-width:220px;text-align:right', text: best.note }) : null,
+          link ? h('a', { class: 'book', href: link, target: '_blank', rel: 'noopener noreferrer', text: 'Book on Google Flights' }) : null)));
+    } else bestBox.remove();
     main.append(...[table('Economy', econ), table('Premium economy', prem), table('Business class', biz), table('First class', first)].filter(Boolean));
     drawBars(barsBox, mainCab);
-    drawLine(lineBox, history);
+    drawLine(lineBox, month);
+    drawDates(datesBox, byDate);
   }
 
   function tip(box, a, b, x, y) {
@@ -572,6 +605,30 @@
       const c = sv('circle', { cx, cy, r: i === history.length - 1 ? 6 : 4, fill: i === history.length - 1 ? css('--sign') : css('--navy') }, svg);
       c.addEventListener('pointermove', () => tip(box, 'Checked ' + day(p.checked), gbp(p.price), cx, cy));
       c.addEventListener('pointerleave', () => untip(box));
+    });
+  }
+
+  // One column per departure day; the cheapest day is highlighted.
+  function drawDates(box, list) {
+    box.querySelector('svg')?.remove(); if (!list.length) return;
+    const W = box.clientWidth || 320, H = 220, T = 14, B = 26;
+    const svg = sv('svg', { width: '100%', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Cheapest fare for each departure date' }, box);
+    const ps = list.map((d) => d.price), hi = Math.ceil(Math.max(...ps) * 1.1 / 100) * 100, min = Math.min(...ps);
+    const probe = sv('text', {}, svg); probe.textContent = gbp(hi); const L = probe.getComputedTextLength() + 10; probe.remove();
+    const y = (p) => T + (H - T - B) * (1 - p / hi);
+    for (let i = 0; i <= 4; i++) {
+      const p = hi * i / 4;
+      sv('line', { x1: L, x2: W, y1: y(p), y2: y(p), stroke: css('--line') }, svg);
+      const t = sv('text', { x: L - 6, y: y(p), 'dominant-baseline': 'middle', 'text-anchor': 'end' }, svg); t.textContent = gbp(p);
+    }
+    const slot = (W - L) / list.length, bw = Math.max(2, Math.min(28, slot * 0.7));
+    const every = Math.max(1, Math.ceil(56 / slot));
+    list.forEach((d, i) => {
+      const cx = L + slot * (i + 0.5), top = y(d.price);
+      const b = sv('rect', { x: cx - bw / 2, y: top, width: bw, height: Math.max(1, y(0) - top), rx: 3, fill: d.price === min ? css('--sign') : css('--navy') }, svg);
+      b.addEventListener('pointermove', () => tip(box, `Fly out ${day(d.date)}${d.code ? ' from ' + d.code : ''}`, gbp(d.price), cx, top));
+      b.addEventListener('pointerleave', () => untip(box));
+      if (i % every === 0) { const s = sv('text', { x: cx, y: H - 6, 'text-anchor': 'middle' }, svg); s.textContent = short(d.date); }
     });
   }
 
@@ -716,7 +773,7 @@
         field('Notes for the checker', h('textarea', { id: 'f-notes', placeholder: 'Anything else to weigh up, e.g. happy to fly from Europe if it saves £200' }, c.notes || ''), 'Optional. Leave limits, preferred airlines and so on')),
       err,
       h('div', { class: 'formbar' },
-        h('p', { class: 'muted small', text: 'New and changed searches are priced at the next Tuesday or Friday check.' }),
+        h('p', { class: 'muted small', text: 'New and changed searches are priced at the next daily check.' }),
         h('div', { class: 'actions' },
           h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: () => { state.mode = 'view'; render(); } }),
           h('button', { class: 'btn primary', type: 'submit', id: 'saveBtn', text: s ? 'Save changes' : 'Save search' }))));
@@ -864,8 +921,9 @@
     gb.hidden = !STATIC;
     gb.textContent = ls.get('loz-gh-token') ? 'Disconnect GitHub' : sharedToken ? 'Shared editing on' : 'Connect GitHub to edit';
     const cb = $('#checkAllBtn');
-    cb.hidden = !(state.canEdit && !STATIC);
-    $('#checkInClaude').hidden = !STATIC;
+    // Checks now run daily on Charlotte's Mac, which a page can't start, so the manual check buttons stay hidden.
+    cb.hidden = true;
+    $('#checkInClaude').hidden = true;
     cb.dataset.check = 'all';
     renderBoard();
     if (state.mode === 'view') renderView();
