@@ -473,13 +473,13 @@
       h('div', { class: 'head' },
         h('div', {},
           h('h2', {}, c.name || 'Untitled search', h('span', { class: 'pill' + (c.status === 'paused' ? '' : ' live'), text: c.status === 'paused' ? 'Paused' : 'Checking' }), s.pending ? h('span', { class: 'pill', text: 'Saved, applies at next check' }) : null),
-          h('p', { class: 'muted small', text: latest ? `Last checked ${day(latest.checked)}` : 'Not checked yet. Prices appear after the next daily check.' })),
-        state.canEdit ? h('div', { class: 'actions' },
-          h('button', { class: 'btn', type: 'button', text: 'Edit criteria', onclick: () => openEditor(s) }),
-          h('button', { class: 'btn', type: 'button', text: c.status === 'paused' ? 'Resume checks' : 'Pause checks', onclick: () => togglePause(s) }),
-          h('button', { class: 'btn danger', type: 'button', text: 'Delete', onclick: () => { state.confirmDelete = true; renderView(); } })) : null),
+          h('p', { class: 'muted small', text: latest ? `Last checked ${day(latest.checked)}` : 'Not checked yet. Prices appear after the next daily check.' }))),
       criteriaChips(c),
       c.notes ? h('p', { class: 'muted small', style: 'margin-top:10px', text: c.notes }) : null,
+      state.canEdit ? h('div', { class: 'actions', style: 'margin-top:14px;padding-top:14px;border-top:1px solid var(--line)' },
+        h('button', { class: 'btn', type: 'button', text: 'Edit criteria', onclick: () => openEditor(s) }),
+        h('button', { class: 'btn', type: 'button', text: c.status === 'paused' ? 'Resume checks' : 'Pause checks', onclick: () => togglePause(s) }),
+        h('button', { class: 'btn danger', type: 'button', text: 'Delete', onclick: () => { state.confirmDelete = true; renderView(); } })) : null,
       state.confirmDelete ? h('div', { class: 'confirm', style: 'margin-top:14px' },
         h('span', { text: `Delete “${c.name}” and all its price history? This can't be undone.` }),
         h('button', { class: 'btn solid-danger', type: 'button', text: 'Delete search', id: 'confirmDel', onclick: () => removeSearch(s) }),
@@ -492,13 +492,20 @@
     const change = history.length > 1 ? history[history.length - 1].price - history[history.length - 2].price : null;
     const label = mainCab[0] ? cab(mainCab[0]).toLowerCase() : 'economy';
     const tile = (lab, big, note, cls) => h('div', { class: 'card tile' }, h('p', { class: 'lab', text: lab }), h('p', { class: 'big ' + (cls || ''), text: big }), h('p', { class: 'muted small', text: note }));
+    // A fare tile: where it flies from, and a Book button for that fare.
+    const fareTile = (lab, r, none) => {
+      const link = r && (r.booking_url || gfLink(r));
+      return h('div', { class: 'card tile' }, h('p', { class: 'lab', text: lab }), h('p', { class: 'big', text: r ? gbp(r.price) : '—' }),
+        h('p', { class: 'muted small', text: r ? `From ${r.origin}` : none }),
+        link ? h('a', { class: 'book', style: 'margin-top:10px', href: link, target: '_blank', rel: 'noopener noreferrer', text: 'Book on Google Flights' }) : null);
+    };
     // Filled once the booking-link helpers below exist.
     const bestBox = h('section', { class: 'card bestday', style: 'margin-top:12px' });
     main.append(bestBox);
     main.append(h('section', { class: 'tiles', style: 'margin-top:12px' },
-      tile(`Cheapest ${label}, any airport`, cheapest ? gbp(cheapest.price) : '—', cheapest ? `${cheapest.origin} with ${cheapest.airlines}` : 'None found'),
-      tile(`Cheapest ${label} from the UK`, ukBest ? gbp(ukBest.price) : '—', ukBest ? `${ukBest.origin} with ${ukBest.airlines}` : 'None found from the UK'),
-      biz.length && mainCab !== biz ? tile('Best value business', gbp(biz[0].price), `${biz[0].origin} with ${biz[0].airlines}`) : null,
+      fareTile(`Cheapest ${label}, any airport`, cheapest, 'None found'),
+      fareTile(`Cheapest ${label} from the UK`, ukBest, 'None found from the UK'),
+      biz.length && mainCab !== biz ? fareTile('Best value business', biz[0]) : null,
       tile('Change since previous check', change == null ? 'First check' : change === 0 ? 'No change' : (change > 0 ? '+' : '−') + gbp(Math.abs(change)), `Cheapest ${label} against the check before`, change > 0 ? 'up' : change < 0 ? 'down' : '')));
 
     const barsBox = h('div', { class: 'chart', id: 'bars' });
@@ -544,7 +551,8 @@
     ];
     // Google Flights link built in Google's own tfs format, so the airports, both dates, cabin, adults and
     // stop limit are set exactly (the text q= links leave Google to guess). Open-jaw trips become one multi-city search.
-    const gfLink = (r) => {
+    // A function declaration, so the tiles above can use it too.
+    function gfLink(r) {
       const enc = new TextEncoder();
       const varint = (n) => { const o = []; while (n > 127) { o.push((n & 127) | 128); n >>>= 7; } o.push(n); return o; };
       const num = (f, v) => [...varint(f << 3), ...varint(v)];
@@ -563,7 +571,7 @@
       const msg = [...num(1, 28), ...num(2, 2), ...legs.flat(), ...Array.from({ length: Math.max(1, Number(c.adults) || 1) }, () => num(8, 1)).flat(), ...num(9, seat), ...num(19, trip)];
       const b64 = btoa(String.fromCharCode(...msg)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       return `https://www.google.com/travel/flights/search?tfs=${b64}&curr=GBP&hl=en-GB&gl=GB`;
-    };
+    }
     const table = (title, list) => list.length ? h('section', { class: 'card', style: 'margin-top:12px' },
       h('h3', { text: title }),
       h('p', { class: 'muted small', text: 'Each fare shows the flight out and the flight home. Book opens Google Flights with both flights, then its Book with the airline button takes them through to the airline. Trips priced as two one-way tickets get a button for each. Copy flight details gives you the dates and flight numbers if you would rather book on the airline’s own site.' }),
