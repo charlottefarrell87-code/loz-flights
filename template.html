@@ -426,7 +426,7 @@
     const tile = (lab, big, note, cls) => h('div', { class: 'card tile' }, h('p', { class: 'lab', text: lab }), h('p', { class: 'big ' + (cls || ''), text: big }), h('p', { class: 'muted small', text: note }));
     main.append(h('section', { class: 'tiles', style: 'margin-top:12px' },
       tile(`Cheapest ${label}, any airport`, cheapest ? gbp(cheapest.price) : '—', cheapest ? `${cheapest.origin} with ${cheapest.airlines}` : 'None found'),
-      tile(`Cheapest ${label} from the UK`, ukBest ? gbp(ukBest.price) : '—', ukBest ? `${ukBest.origin} with ${ukBest.airlines}. Leaves from the UK, so this is the full price. Fares from other countries need a flight there and back on top.` : 'None found from the UK'),
+      tile(`Cheapest ${label} from the UK`, ukBest ? gbp(ukBest.price) : '—', ukBest ? `${ukBest.origin} with ${ukBest.airlines}` : 'None found from the UK'),
       biz.length && mainCab !== biz ? tile('Best value business', gbp(biz[0].price), `${biz[0].origin} with ${biz[0].airlines}`) : null,
       tile('Change since previous check', change == null ? 'First check' : change === 0 ? 'No change' : (change > 0 ? '+' : '−') + gbp(Math.abs(change)), `Cheapest ${label} against the check before`, change > 0 ? 'up' : change < 0 ? 'down' : '')));
 
