@@ -1,4 +1,4 @@
-<title>Loz Flights</title>
+<title>AskCharlotte?</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -157,7 +157,7 @@
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Loz Flights</h1>
+      <h1>AskCharlotte?</h1>
       <p class="muted small">Saved fare searches, checked on Google Flights every morning.</p>
     </div>
     <div class="actions">
@@ -907,7 +907,7 @@
       if (STATIC) {
         await queueChange({ op: 'delete', id: s.id, name: s.data.name, at: new Date().toISOString() });
         state.confirmDelete = false; state.current = null; location.hash = ''; fromHash();
-        alertLine(`“${s.data.name}” will be removed from Loz Flights at the next check.`);
+        alertLine(`“${s.data.name}” will be removed at the next check.`);
         return;
       }
       const snap = await state.db.collection(`results/${s.id}/checks`).get();
