@@ -114,6 +114,8 @@
   .notice { border-left: 4px solid var(--sign); background: var(--panel); border-radius: 0 var(--r) var(--r) 0; padding: 12px 16px; }
 
   form.editor { display: grid; gap: 18px; }
+  dialog.fbdlg { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); color: var(--fg); padding: 20px; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
+  dialog.fbdlg::backdrop { background: rgba(10, 16, 24, .45); }
   fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
   legend { font-family: var(--display); font-weight: 700; font-size: 16px; margin-bottom: 8px; padding: 0; }
   .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 12px; }
@@ -160,6 +162,7 @@
       <button class="btn" id="ghBtn" type="button" hidden>Connect GitHub to edit</button>
       <button class="btn" id="checkAllBtn" type="button" hidden>Check prices now</button>
       <a class="btn" id="checkInClaude" href="https://claude.ai/artifact/UNZQ2g7YRK22fizaZbka3c" target="_blank" rel="noopener noreferrer" hidden style="text-decoration:none">Check prices now (opens Claude)</a>
+      <button class="btn" id="fbBtn" type="button" hidden>Feedback</button>
       <button class="btn sign" id="newBtn" type="button" hidden>New search</button>
     </div>
   </header>
@@ -290,6 +293,57 @@
         state.pending = changes; applyPending(); return;
       } catch (e) { if (e.status === 409 && attempt === 0) continue; throw e; }
     }
+  }
+  // Feedback about the dashboard, encrypted like pending changes, in feedback.enc.json. Read with feedback.py.
+  const FEEDBACK = 'feedback.enc.json';
+  async function addFeedbackToRepo(item) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r0 = await fetch(`https://api.github.com/repos/${REPO}/contents/${FEEDBACK}?ref=main`, { headers: ghHeaders(), cache: 'no-store' });
+      let sha = null, items = [];
+      if (r0.ok) { const j = await r0.json(); sha = j.sha; const doc = JSON.parse(atob(j.content.replace(/\s/g, ''))); items = doc.ct ? (await decrypt(doc)).items || [] : []; }
+      else if (r0.status !== 404) throw ghErr(r0.status);
+      const body = { message: 'Add dashboard feedback', content: btoa(JSON.stringify(await encrypt({ items: items.concat([item]) }))), branch: 'main' };
+      if (sha) body.sha = sha;
+      const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${FEEDBACK}`, { method: 'PUT', headers: { ...ghHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (r.ok) return;
+      if (r.status === 409 && attempt === 0) continue;
+      throw ghErr(r.status);
+    }
+  }
+  const canSendFeedback = () => STATIC ? !!(aesKey && ghToken()) : !!state.db;
+  function openFeedback() {
+    const err = h('p', { class: 'err', role: 'alert' });
+    const name = h('input', { type: 'text', id: 'fb-name', maxlength: '60', autocomplete: 'name', value: ls.get('loz-fb-name') || '' });
+    const text = h('textarea', { id: 'fb-text', maxlength: '4000', rows: '6', required: true, placeholder: 'For example: show the flight times in the email, or add a filter for direct flights only.' });
+    const send = h('button', { class: 'btn primary', type: 'submit', text: 'Send feedback' });
+    const dlg = h('dialog', { class: 'fbdlg', 'aria-labelledby': 'fb-title' });
+    const close = () => { dlg.close(); dlg.remove(); };
+    const form = h('form', { class: 'editor', method: 'dialog' },
+      h('h2', { id: 'fb-title', text: 'Feedback and suggestions' }),
+      h('p', { class: 'muted small', text: 'Ideas for how this dashboard or the daily Flight Report could work better. Charlotte reviews everything sent here. To change a trip’s dates or airports, edit the search instead.' }),
+      field('Your name (optional)', name),
+      field('Your suggestion', text),
+      err,
+      h('div', { class: 'formbar' }, h('span'),
+        h('div', { class: 'actions' }, h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: close }), send)));
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = text.value.trim();
+      if (!msg) { err.textContent = 'Type your suggestion first.'; text.focus(); return; }
+      const item = { at: new Date().toISOString(), name: name.value.trim(), text: msg, search: state.current || null, from: STATIC ? 'site' : 'claude' };
+      send.disabled = true; send.textContent = 'Sending…'; err.textContent = '';
+      try {
+        if (STATIC) await addFeedbackToRepo(item);
+        else await state.db.doc('feedback/' + item.at.replace(/[^0-9]/g, '') + '-' + Math.random().toString(36).slice(2, 6)).set(item);
+        if (item.name) ls.set('loz-fb-name', item.name);
+        close(); alertLine('Thanks, your feedback has been sent.');
+      } catch (x) {
+        err.textContent = STATIC ? ghMessage(x) : 'Couldn’t send just now. Check your connection and try again.';
+        send.disabled = false; send.textContent = 'Send feedback';
+      }
+    });
+    dlg.addEventListener('close', () => dlg.remove());
+    dlg.append(form); document.body.append(dlg); dlg.showModal(); text.focus();
   }
   function applyPending() {
     const map = new Map(STATIC.searches.filter((x) => x.data).map((x) => [x.id, { id: x.id, data: x.data }]));
@@ -917,6 +971,7 @@
   }
   function render() {
     $('#newBtn').hidden = !state.canEdit;
+    $('#fbBtn').hidden = !canSendFeedback();
     const gb = $('#ghBtn');
     gb.hidden = !STATIC;
     gb.textContent = ls.get('loz-gh-token') ? 'Disconnect GitHub' : sharedToken ? 'Shared editing on' : 'Connect GitHub to edit';
@@ -950,6 +1005,7 @@
   }
 
   $('#newBtn').addEventListener('click', () => openEditor(null));
+  $('#fbBtn').addEventListener('click', openFeedback);
   $('#checkAllBtn').addEventListener('click', () => requestCheck(null));
   $('#ghBtn').addEventListener('click', () => {
     if (ls.get('loz-gh-token')) { ls.del('loz-gh-token'); state.canEdit = !!sharedToken; state.mode = 'view'; render(); }
