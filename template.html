@@ -203,6 +203,9 @@
     if (!b || a.slice(0, 7) === b.slice(0, 7)) return m(a, true);
     return a.slice(0, 4) === b.slice(0, 4) ? `${m(a)} to ${m(b, true)}` : `${m(a, true)} to ${m(b, true)}`;
   };
+  // Notes can carry raw search addresses; show each as a short link instead of the full URL.
+  const noteParts = (s) => String(s || '').split(/(https?:\/\/[^\s)]+)/).filter(Boolean).map((p) => /^https?:\/\//.test(p)
+    ? h('a', { href: p, target: '_blank', rel: 'noopener noreferrer', text: /google\.[^/]+\/travel\/flights/.test(p) ? 'Google Flights' : 'link' }) : p);
   const daysBetween = (a, b) => Math.round((dt(b) - dt(a)) / 864e5);
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const slug = (s) => (s || 'search').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'search';
@@ -575,7 +578,7 @@
               h('td', { class: 'from span', rowspan: '2' }, h('span', { class: 'city', text: r.origin }), h('span', { class: 'sub code', text: r.code })),
               h('td', {}, h('span', { class: 'legtag', text: 'Out' })),
               ...legCells(out),
-              h('td', { class: 'num mono price span', rowspan: '2' }, gbp(r.price), r.note ? h('span', { class: 'sub', style: 'font-family:var(--body);white-space:normal;max-width:180px', text: r.note }) : null),
+              h('td', { class: 'num mono price span', rowspan: '2' }, gbp(r.price), r.note ? h('span', { class: 'sub', style: 'font-family:var(--body);white-space:normal;max-width:180px' }, noteParts(r.note)) : null),
               h('td', { class: 'act span', rowspan: '2' },
                 gfOut ? h('a', { class: 'book', href: gfOut, target: '_blank', rel: 'noopener noreferrer', title: r.booking_url ? 'Opens these exact flights on Google Flights, with the airline’s booking button' : 'Opens Google Flights with these airports, dates and cabin; pick the flights shown here to book', text: twoTickets ? 'Book flight out' : 'Book on Google Flights' }) : '—',
                 gfBack ? h('a', { class: 'book', style: 'margin-top:6px', href: gfBack, target: '_blank', rel: 'noopener noreferrer', text: 'Book flight home' }) : null,
@@ -603,7 +606,7 @@
           ukBest && ukBest !== best && !best.uk ? h('p', { class: 'muted small', text: `Best from the UK: ${gbp(ukBest.price)} from ${ukBest.origin} with ${ukBest.airlines}.` }) : null),
         h('div', { style: 'display:grid;gap:8px;justify-items:end' },
           h('p', { class: 'big mono', style: 'font-size:34px;font-weight:600;margin:0', text: gbp(best.price) }),
-          best.note ? h('p', { class: 'muted small', style: 'max-width:220px;text-align:right', text: best.note }) : null,
+          best.note ? h('p', { class: 'muted small', style: 'max-width:220px;text-align:right' }, noteParts(best.note)) : null,
           link ? h('a', { class: 'book', href: link, target: '_blank', rel: 'noopener noreferrer', text: 'Book on Google Flights' }) : null)));
     } else bestBox.remove();
     main.append(...[table('Economy', econ), table('Premium economy', prem), table('Business class', biz), table('First class', first)].filter(Boolean));
