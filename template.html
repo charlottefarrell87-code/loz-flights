@@ -433,6 +433,7 @@
       chip('Home', `${day(c.return_from)} to ${day(c.return_to)}`),
       c.ideal_return && c.ideal_return.length ? chip('Ideal home', c.ideal_return.map(short).join(' or ')) : null,
       c.home_by ? chip('Back in UK by', day(c.home_by)) : null,
+      c.min_days || c.max_days ? chip('Days away', c.min_days && c.max_days ? (c.min_days === c.max_days ? `${c.min_days}` : `${c.min_days} to ${c.max_days}`) : c.min_days ? `at least ${c.min_days}` : `up to ${c.max_days}`) : null,
       chip('Cabin', (c.cabins || []).join(', ')),
       chip('Adults', String(c.adults || 1)),
       c.max_stops != null && c.max_stops !== '' ? chip('Max stops', String(c.max_stops)) : null,
@@ -826,7 +827,9 @@
           field('Latest flight home', h('input', { type: 'date', id: 'f-ret-to', required: true, value: c.return_to || '' }), 'Last day you could fly home'),
           field('Ideal day home', h('input', { type: 'date', id: 'f-ideal1', value: (c.ideal_return || [])[0] || '' }), 'Optional. Preferred when within about £50'),
           field('Or ideally', h('input', { type: 'date', id: 'f-ideal2', value: (c.ideal_return || [])[1] || '' }), 'Optional. A second preferred day'),
-          field('Back in the UK by', h('input', { type: 'date', id: 'f-home-by', value: c.home_by || '' }), 'Optional. Must be home by this day'))),
+          field('Back in the UK by', h('input', { type: 'date', id: 'f-home-by', value: c.home_by || '' }), 'Optional. Must be home by this day'),
+          field('Min days away', h('input', { type: 'number', id: 'f-min-days', min: '1', max: '365', value: c.min_days || '', placeholder: 'e.g. 14' }), 'Optional. Shortest trip, counting from the day you fly out'),
+          field('Max days away', h('input', { type: 'number', id: 'f-max-days', min: '1', max: '365', value: c.max_days || '', placeholder: 'e.g. 21' }), 'Optional. Longest trip, counting from the day you fly out'))),
       h('fieldset', {}, h('legend', { text: 'Cabin' }),
         h('div', { class: 'checks' }, cabins.map((cb, i) => h('label', {}, h('input', { type: 'checkbox', id: 'f-cab-' + i, value: cb, checked: (c.cabins || []).includes(cb) }), cb)))),
       h('fieldset', {}, h('legend', { text: 'Preferences' }),
@@ -859,6 +862,7 @@
       name: v('f-name'), origins, dest: v('f-dest').toUpperCase(), home_from: v('f-home-from').toUpperCase() || null, adults: Number(v('f-adults')) || 1,
       depart_from: v('f-dep-from'), depart_to: v('f-dep-to'), land_by: v('f-land-by') || null,
       return_from: v('f-ret-from'), return_to: v('f-ret-to'), ideal_return: [v('f-ideal1'), v('f-ideal2')].filter(Boolean), home_by: v('f-home-by') || null,
+      min_days: Number(v('f-min-days')) || null, max_days: Number(v('f-max-days')) || null,
       cabins, max_stops: v('f-stops') === '' ? null : Number(v('f-stops')), max_hours: Number(v('f-hours')) || null,
       layover: v('f-layover'), alert_economy: Number(v('f-alert-e')) || null, alert_business: Number(v('f-alert-b')) || null,
       book_direct: $('#f-direct', form).checked, quick_home: $('#f-quick', form).checked, notes: v('f-notes'),
@@ -872,6 +876,9 @@
       : data.depart_to < data.depart_from ? 'Leave by must be on or after Leave from.'
       : data.return_to < data.return_from ? 'Latest flight home must be on or after Earliest flight home.'
       : data.return_from <= data.depart_from ? 'Flying home must be after leaving.'
+      : data.min_days && data.max_days && data.max_days < data.min_days ? 'Max days away must be the same as or more than Min days away.'
+      : data.min_days && daysBetween(data.depart_from, data.return_to) < data.min_days ? `Your dates allow at most ${daysBetween(data.depart_from, data.return_to)} days away, less than Min days away.`
+      : data.max_days && daysBetween(data.depart_to, data.return_from) > data.max_days ? `Your dates need at least ${daysBetween(data.depart_to, data.return_from)} days away, more than Max days away.`
       : null;
     if (bad) { err.textContent = bad; return; }
     err.textContent = '';
