@@ -190,6 +190,13 @@
   const dt = (s) => new Date(s + 'T00:00:00Z');
   const day = (s) => s ? dt(s).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) : '—';
   const short = (s) => s ? dt(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '';
+  // Search windows are flexible, so tabs show months only: "Mar to Apr 2027", or "Mar 2027" within one month.
+  const monthSpan = (a, b) => {
+    if (!a) return '';
+    const m = (s, y) => dt(s).toLocaleDateString('en-GB', { month: 'short', year: y ? 'numeric' : undefined, timeZone: 'UTC' });
+    if (!b || a.slice(0, 7) === b.slice(0, 7)) return m(a, true);
+    return a.slice(0, 4) === b.slice(0, 4) ? `${m(a)} to ${m(b, true)}` : `${m(a, true)} to ${m(b, true)}`;
+  };
   const daysBetween = (a, b) => Math.round((dt(b) - dt(a)) / 864e5);
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const slug = (s) => (s || 'search').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'search';
@@ -349,7 +356,7 @@
       board.append(h('button', { class: 'tab', type: 'button', 'aria-current': String(s.id === state.current && state.mode !== 'new'), onclick: () => select(s.id) },
         h('span', { class: 'route', text: `${(c.origins || []).length > 2 ? 'EUROPE' : (c.origins || []).join('/')} → ${c.dest || ''}${c.home_from && c.home_from !== c.dest ? ' · ' + c.home_from + ' → home' : ''}` }),
         h('span', { class: 'nm', text: c.name || 'Untitled search' }),
-        h('span', { class: 'st', text: `${short(c.depart_from)} to ${short(c.return_to || c.return_from)}${c.status === 'paused' ? ' · paused' : ''}` })));
+        h('span', { class: 'st', text: `${monthSpan(c.depart_from, c.return_to || c.return_from)}${c.status === 'paused' ? ' · paused' : ''}` })));
     }
   }
 
