@@ -471,6 +471,28 @@
       h('td', { class: 'wr' }, l.thin && !l.layover ? h('span', { class: 'muted small', style: 'white-space:nowrap', text: 'Details at next check' }) : (l.stops || '—'), l.layover ? h('span', { class: 'sub', text: l.layover }) : null),
       h('td', { class: 'num mono', text: l.hours != null ? Number(l.hours).toFixed(1) : '—' }),
     ];
+    // Google Flights link built in Google's own tfs format, so the airports, both dates, cabin, adults and
+    // stop limit are set exactly (the text q= links leave Google to guess). Open-jaw trips become one multi-city search.
+    const gfLink = (r) => {
+      const enc = new TextEncoder();
+      const varint = (n) => { const o = []; while (n > 127) { o.push((n & 127) | 128); n >>>= 7; } o.push(n); return o; };
+      const num = (f, v) => [...varint(f << 3), ...varint(v)];
+      const bytes = (f, b) => [...varint((f << 3) | 2), ...varint(b.length), ...b];
+      const str = (f, s) => bytes(f, [...enc.encode(s)]);
+      const airport = (f, code) => bytes(f, [...num(1, 1), ...str(2, code)]);
+      const stops = c.max_stops != null && c.max_stops !== '' ? Number(c.max_stops) : null;
+      const leg = (from, to, date) => bytes(3, [...str(2, date), ...(stops != null ? num(5, stops) : []), ...airport(13, from), ...airport(14, to)]);
+      const back = r.back || {}, homeFrom = back.from || (c.home_from && c.home_from !== c.dest ? c.home_from : null);
+      const ret = back.depart || r.return;
+      if (!r.code || !c.dest || !r.depart) return r.search_url || null;
+      const legs = [leg(r.code, c.dest, r.depart)];
+      let trip = 2;
+      if (ret) { legs.push(leg(homeFrom || c.dest, r.code, ret)); trip = homeFrom ? 3 : 1; }
+      const seat = { 'Economy': 1, 'Premium economy': 2, 'Business': 3, 'First': 4 }[r.cabin || 'Economy'] || 1;
+      const msg = [...num(1, 28), ...num(2, 2), ...legs.flat(), ...Array.from({ length: Math.max(1, Number(c.adults) || 1) }, () => num(8, 1)).flat(), ...num(9, seat), ...num(19, trip)];
+      const b64 = btoa(String.fromCharCode(...msg)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      return `https://www.google.com/travel/flights/search?tfs=${b64}&curr=GBP&hl=en-GB&gl=GB`;
+    };
     const table = (title, list) => list.length ? h('section', { class: 'card', style: 'margin-top:12px' },
       h('h3', { text: title }),
       h('p', { class: 'muted small', text: 'Each fare shows the flight out and the flight home. Book opens Google Flights with both flights, then its Book with the airline button takes them through to the airline. Trips priced as two one-way tickets get a button for each. Copy flight details gives you the dates and flight numbers if you would rather book on the airline’s own site.' }),
@@ -481,7 +503,7 @@
           // Google Flights carries both legs (or each one-way ticket) through to the airline's booking page.
           const b = r.back || {};
           const twoTickets = !!(b.booking_url || b.search_url);
-          const gfOut = r.booking_url || r.search_url, gfBack = twoTickets ? b.booking_url || b.search_url : null;
+          const gfOut = r.booking_url || gfLink(r), gfBack = twoTickets ? b.booking_url || b.search_url : null;
           return h('tbody', { class: i === 0 ? 'best' : null },
             h('tr', { class: 'leg-out' },
               h('td', { class: 'from span', rowspan: '2' }, h('span', { class: 'city', text: r.origin }), h('span', { class: 'sub code', text: r.code })),
@@ -489,7 +511,7 @@
               ...legCells(out),
               h('td', { class: 'num mono price span', rowspan: '2' }, gbp(r.price), r.note ? h('span', { class: 'sub', style: 'font-family:var(--body);white-space:normal;max-width:180px', text: r.note }) : null),
               h('td', { class: 'act span', rowspan: '2' },
-                gfOut ? h('a', { class: 'book', href: gfOut, target: '_blank', rel: 'noopener noreferrer', title: r.booking_url ? 'Opens these exact flights on Google Flights, with the airline’s booking button' : 'Opens the Google Flights search for these dates; pick the same flights to book', text: twoTickets ? 'Book flight out' : 'Book on Google Flights' }) : '—',
+                gfOut ? h('a', { class: 'book', href: gfOut, target: '_blank', rel: 'noopener noreferrer', title: r.booking_url ? 'Opens these exact flights on Google Flights, with the airline’s booking button' : 'Opens Google Flights with these airports, dates and cabin; pick the flights shown here to book', text: twoTickets ? 'Book flight out' : 'Book on Google Flights' }) : '—',
                 gfBack ? h('a', { class: 'book', style: 'margin-top:6px', href: gfBack, target: '_blank', rel: 'noopener noreferrer', text: 'Book flight home' }) : null,
                 h('button', { class: 'copy', type: 'button', text: 'Copy flight details', onclick: (e) => copyDetails(e.currentTarget, copyText(r, title)) }),
                 r.book_url ? h('a', { class: 'sub', style: 'margin-top:6px;text-align:center', href: r.book_url, target: '_blank', rel: 'noopener noreferrer', text: (r.book_with || r.airlines) + ' website' }) : null)),
